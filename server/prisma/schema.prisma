@@ -1,0 +1,61 @@
+// Prisma schema for GameConnect
+// PostgreSQL database
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Game {
+  id              Int      @id
+  name            String
+  genre           String
+  rating          Float
+  reviewsCount    String
+  platforms       String[]
+  image           String
+  description     String
+  featuredTag     String
+  releaseDate     String
+  developer       String
+  publisher       String
+  fullDescription String
+  screenshots     String[]
+}
+
+model Player {
+  id                  Int      @id
+  username            String
+  avatar              String
+  games               String[]
+  skillLevel          String
+  playstyle           String
+  platform            String
+  availability        String
+  onlineHours         String
+  matchPercentage     Int
+  region              String
+  status              String
+  bio                 String
+
+  compatibility       Json
+
+  favoriteGameIds     Int[]
+  currentlyPlayingIds Int[]
+  commonGames         String[]
+
+  preferences         Json
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
