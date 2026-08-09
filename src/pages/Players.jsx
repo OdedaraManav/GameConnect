@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Filter, RotateCcw, Frown, Check, Monitor, Smartphone, Tv, Sparkles, MessageSquare, UserPlus, Eye } from 'lucide-react';
-import { MOCK_PLAYERS, MOCK_GAMES } from '../data/mockData';
+import { Users, Filter, RotateCcw, Frown, Check, Monitor, Smartphone, Tv, Sparkles, MessageSquare, UserPlus, Eye, Loader2, AlertCircle } from 'lucide-react';
+import { fetchJson } from '../services/api';
 
 const SKILL_LEVELS = ['Any Skill', 'Beginner', 'Intermediate', 'Advanced', 'Competitive'];
 const PLAYSTYLES = ['Any Playstyle', 'Casual', 'Competitive', 'Social', 'Explorer', 'Strategic'];
@@ -9,14 +9,37 @@ const AVAILABILITIES = ['Any Time', 'Morning', 'Afternoon', 'Evening', 'Night'];
 const PLATFORMS = ['Any Platform', 'PC', 'PS5', 'Xbox', 'Mobile'];
 
 export default function Players() {
+  const [players, setPlayers] = useState([]);
+  const [gamesList, setGamesList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [selectedGame, setSelectedGame] = useState('Any Game');
   const [selectedSkill, setSelectedSkill] = useState('Any Skill');
   const [selectedPlaystyle, setSelectedPlaystyle] = useState('Any Playstyle');
   const [selectedAvailability, setSelectedAvailability] = useState('Any Time');
   const [selectedPlatform, setSelectedPlatform] = useState('Any Platform');
 
-  // Mobile filter drawer state
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  // Fetch players and games list from Express backend
+  const loadPlayersData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const playersData = await fetchJson('/players');
+      setPlayers(playersData);
+
+      const gamesData = await fetchJson('/games').catch(() => []);
+      setGamesList(gamesData);
+    } catch (err) {
+      setError('Unable to load squad players. Please make sure the GameConnect server is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPlayersData();
+  }, []);
 
   // Reset filters handler
   const handleClearFilters = () => {
@@ -37,7 +60,7 @@ export default function Players() {
 
   // Filter player profiles
   const filteredPlayers = useMemo(() => {
-    return MOCK_PLAYERS.filter((player) => {
+    return players.filter((player) => {
       // 1. Game Filter
       const matchesGame = selectedGame === 'Any Game' || 
         player.games.some((g) => g.toLowerCase().includes(selectedGame.toLowerCase()));
@@ -60,7 +83,7 @@ export default function Players() {
 
       return matchesGame && matchesSkill && matchesPlaystyle && matchesAvailability && matchesPlatform;
     });
-  }, [selectedGame, selectedSkill, selectedPlaystyle, selectedAvailability, selectedPlatform]);
+  }, [players, selectedGame, selectedSkill, selectedPlaystyle, selectedAvailability, selectedPlatform]);
 
   const renderPlatformIcon = (platform) => {
     switch (platform.toLowerCase()) {
@@ -98,7 +121,7 @@ export default function Players() {
               className="player-filter-select"
             >
               <option value="Any Game">Any Game</option>
-              {MOCK_GAMES.map((g) => (
+              {gamesList.map((g) => (
                 <option key={g.id} value={g.name}>{g.name}</option>
               ))}
             </select>
@@ -176,8 +199,23 @@ export default function Players() {
           </span>
         </div>
 
-        {/* Players Grid OR Empty State */}
-        {filteredPlayers.length > 0 ? (
+        {/* Players Grid OR Loading OR Error OR Empty State */}
+        {loading ? (
+          <div className="loading-state glass-panel text-center">
+            <Loader2 className="spinner-icon icon-cyan" size={40} />
+            <p>Loading squad players from Express server...</p>
+          </div>
+        ) : error ? (
+          <div className="error-state glass-panel text-center">
+            <AlertCircle size={48} className="icon-pink margin-b" />
+            <h3 className="error-title">Backend Connection Failed</h3>
+            <p className="error-description">{error}</p>
+            <button className="btn btn-primary margin-top" onClick={loadPlayersData}>
+              <RotateCcw size={16} />
+              <span>Retry Connection</span>
+            </button>
+          </div>
+        ) : filteredPlayers.length > 0 ? (
           <div className="players-grid">
             {filteredPlayers.map((player) => (
               <div key={player.id} className="player-card glass-panel">

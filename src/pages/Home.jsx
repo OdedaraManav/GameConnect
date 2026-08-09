@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Hero from '../components/Hero';
 import SearchBar from '../components/SearchBar';
 import GameSection from '../components/GameSection';
@@ -6,14 +6,27 @@ import PlayerSection from '../components/PlayerSection';
 import HowItWorks from '../components/HowItWorks';
 import CTA from '../components/CTA';
 
-import { MOCK_GAMES } from '../data/mockData';
+import { fetchJson } from '../services/api';
 
 export default function Home() {
+  const [games, setGames] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
 
+  useEffect(() => {
+    async function loadGames() {
+      try {
+        const data = await fetchJson('/games');
+        setGames(data);
+      } catch (err) {
+        console.error('Error loading games on home page:', err);
+      }
+    }
+    loadGames();
+  }, []);
+
   // Filter games based on search query or selected tag
-  const filteredGames = MOCK_GAMES.filter((game) => {
+  const filteredGames = games.filter((game) => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return true;
 

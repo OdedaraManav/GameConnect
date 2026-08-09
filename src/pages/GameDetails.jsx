@@ -1,39 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, Heart, ArrowLeft, Users, Calendar, Building, Monitor, Smartphone, Tv, Gamepad2, ChevronRight } from 'lucide-react';
+import { Star, Heart, ArrowLeft, Users, Calendar, Building, Monitor, Smartphone, Tv, Gamepad2, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import GameCard from '../components/GameCard';
-import { MOCK_GAMES } from '../data/mockData';
+import { fetchJson } from '../services/api';
 
 export default function GameDetails() {
   const { id } = useParams();
+  const [game, setGame] = useState(null);
+  const [similarGames, setSimilarGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [activeScreenshot, setActiveScreenshot] = useState(0);
 
-  // Find target game from MOCK_GAMES by numeric ID
-  const game = MOCK_GAMES.find((g) => g.id === parseInt(id, 10));
+  useEffect(() => {
+    async function loadGameDetails() {
+      try {
+        setLoading(true);
+        setError(null);
 
-  // If game is not found, render clean fallback state
-  if (!game) {
-    return (
-      <div className="game-details-not-found container text-center">
-        <div className="glass-panel not-found-card">
-          <Gamepad2 size={64} className="icon-cyan margin-b" />
-          <h2>Game Not Found</h2>
-          <p>We couldn't find any game matching ID #{id}.</p>
-          <Link to="/games" className="btn btn-primary margin-top">
-            <ArrowLeft size={16} />
-            <span>Back to Discovery Library</span>
-          </Link>
-        </div>
-      </div>
-    );
-  }
+        // Fetch single game by ID from backend
+        const gameData = await fetchJson(`/games/${id}`);
+        setGame(gameData);
 
-  // Find similar games (same primary genre or high rating, excluding current game)
-  const primaryGenre = game.genre.split('/')[0].trim();
-  const similarGames = MOCK_GAMES.filter(
-    (g) => g.id !== game.id && (g.genre.includes(primaryGenre) || g.rating >= 4.7)
-  ).slice(0, 3);
+        // Fetch all games to calculate similar games
+        const allGames = await fetchJson('/games');
+        const primaryGenre = gameData.genre.split('/')[0].trim();
+        const related = allGames.filter(
+          (g) => g.id !== gameData.id && (g.genre.includes(primaryGenre) || g.rating >= 4.7)
+        ).slice(0, 3);
+        setSimilarGames(related);
+      } catch (err) {
+        if (err.status === 404) {
+          setError('Game not found');
+        } else {
+          setError('Unable to load game details. Please check if the GameConnect server is running.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadGameDetails();
+  }, [id]);
 
   const renderPlatformIcon = (platform) => {
     switch (platform.toLowerCase()) {
@@ -45,6 +55,35 @@ export default function GameDetails() {
         return <Tv size={14} key={platform} title={platform} />;
     }
   };
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className="game-details-page container">
+        <div className="loading-state glass-panel text-center margin-t-lg">
+          <Loader2 className="spinner-icon icon-cyan" size={44} />
+          <p>Fetching game details from Express server...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error / 404 State
+  if (error || !game) {
+    return (
+      <div className="game-details-not-found container text-center">
+        <div className="glass-panel not-found-card">
+          <Gamepad2 size={64} className="icon-cyan margin-b" />
+          <h2>Game Not Found</h2>
+          <p>{error || `We couldn't find any game matching ID #${id}.`}</p>
+          <Link to="/games" className="btn btn-primary margin-top">
+            <ArrowLeft size={16} />
+            <span>Back to Discovery Library</span>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const screenshotsList = game.screenshots || [game.image];
 

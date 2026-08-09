@@ -1,12 +1,31 @@
-import React from 'react';
-import { CURRENT_USER, MOCK_GAMES } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { CURRENT_USER } from '../data/mockData';
 import GameCard from '../components/GameCard';
-import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity } from 'lucide-react';
+import { fetchJson } from '../services/api';
+import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2 } from 'lucide-react';
 
 export default function Profile() {
-  // Filter favorite games and currently playing games
-  const favoriteGames = MOCK_GAMES.filter((g) => CURRENT_USER.favoriteGameIds.includes(g.id));
-  const currentlyPlayingGames = MOCK_GAMES.filter((g) => CURRENT_USER.currentlyPlayingIds.includes(g.id));
+  const [allGames, setAllGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadGames() {
+      try {
+        setLoading(true);
+        const data = await fetchJson('/games');
+        setAllGames(data);
+      } catch (err) {
+        console.error('Error fetching games for profile:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadGames();
+  }, []);
+
+  // Filter favorite games and currently playing games from fetched backend dataset
+  const favoriteGames = allGames.filter((g) => CURRENT_USER.favoriteGameIds.includes(g.id));
+  const currentlyPlayingGames = allGames.filter((g) => CURRENT_USER.currentlyPlayingIds.includes(g.id));
 
   return (
     <div className="profile-page">
@@ -103,11 +122,18 @@ export default function Profile() {
               <div className="section-header-simple">
                 <h2 className="section-title-sm gradient-text">FAVORITE GAMES</h2>
               </div>
-              <div className="profile-games-grid">
-                {favoriteGames.map((game) => (
-                  <GameCard key={game.id} game={game} />
-                ))}
-              </div>
+              {loading ? (
+                <div className="loading-state glass-panel text-center">
+                  <Loader2 className="spinner-icon icon-cyan" size={32} />
+                  <p>Loading favorite games...</p>
+                </div>
+              ) : (
+                <div className="profile-games-grid">
+                  {favoriteGames.map((game) => (
+                    <GameCard key={game.id} game={game} />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Currently Playing Section */}
@@ -115,11 +141,18 @@ export default function Profile() {
               <div className="section-header-simple">
                 <h2 className="section-title-sm gradient-text">CURRENTLY PLAYING</h2>
               </div>
-              <div className="profile-games-grid">
-                {currentlyPlayingGames.map((game) => (
-                  <GameCard key={game.id} game={game} />
-                ))}
-              </div>
+              {loading ? (
+                <div className="loading-state glass-panel text-center">
+                  <Loader2 className="spinner-icon icon-cyan" size={32} />
+                  <p>Loading active games...</p>
+                </div>
+              ) : (
+                <div className="profile-games-grid">
+                  {currentlyPlayingGames.map((game) => (
+                    <GameCard key={game.id} game={game} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

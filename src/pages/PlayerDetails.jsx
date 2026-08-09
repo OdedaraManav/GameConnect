@@ -1,38 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, UserPlus, MessageSquare, UserCheck, Monitor, Smartphone, Tv, MapPin, Gamepad2, Compass, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Sparkles, UserPlus, MessageSquare, UserCheck, Monitor, Smartphone, Tv, MapPin, Gamepad2, Compass, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import GameCard from '../components/GameCard';
-import { MOCK_PLAYERS, MOCK_GAMES } from '../data/mockData';
+import { fetchJson } from '../services/api';
 
 export default function PlayerDetails() {
   const { id } = useParams();
+  const [player, setPlayer] = useState(null);
+  const [playerFavoriteGames, setPlayerFavoriteGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [isConnected, setIsConnected] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // Find player by numeric ID
-  const player = MOCK_PLAYERS.find((p) => p.id === parseInt(id, 10));
+  useEffect(() => {
+    async function loadPlayerData() {
+      try {
+        setLoading(true);
+        setError(null);
 
-  // Fallback UI if player is not found
-  if (!player) {
-    return (
-      <div className="player-not-found container text-center">
-        <div className="glass-panel not-found-card">
-          <Gamepad2 size={64} className="icon-cyan margin-b" />
-          <h2>Player Not Found</h2>
-          <p>We couldn't find any gamer profile matching ID #{id}.</p>
-          <Link to="/players" className="btn btn-primary margin-top">
-            <ArrowLeft size={16} />
-            <span>Back to Squad Finder</span>
-          </Link>
-        </div>
-      </div>
-    );
-  }
+        // Fetch player by ID from backend
+        const playerData = await fetchJson(`/players/${id}`);
+        setPlayer(playerData);
 
-  // Get favorite and currently playing games objects
-  const playerFavoriteGames = MOCK_GAMES.filter((g) =>
-    player.favoriteGameIds ? player.favoriteGameIds.includes(g.id) : player.games.includes(g.name)
-  );
+        // Fetch games list to render favorite games
+        const gamesData = await fetchJson('/games').catch(() => []);
+        const favGames = gamesData.filter((g) =>
+          playerData.favoriteGameIds ? playerData.favoriteGameIds.includes(g.id) : playerData.games.includes(g.name)
+        );
+        setPlayerFavoriteGames(favGames);
+      } catch (err) {
+        if (err.status === 404) {
+          setError('Player profile not found');
+        } else {
+          setError('Unable to load player profile. Please check if the GameConnect server is running.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadPlayerData();
+  }, [id]);
 
   const renderPlatformIcon = (platform) => {
     switch (platform.toLowerCase()) {
@@ -44,6 +54,35 @@ export default function PlayerDetails() {
         return <Tv size={14} key={platform} title={platform} />;
     }
   };
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className="player-details-page container">
+        <div className="loading-state glass-panel text-center margin-t-lg">
+          <Loader2 className="spinner-icon icon-cyan" size={44} />
+          <p>Fetching player profile from Express server...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error / 404 State
+  if (error || !player) {
+    return (
+      <div className="player-not-found container text-center">
+        <div className="glass-panel not-found-card">
+          <Gamepad2 size={64} className="icon-cyan margin-b" />
+          <h2>Player Not Found</h2>
+          <p>{error || `We couldn't find any gamer profile matching ID #${id}.`}</p>
+          <Link to="/players" className="btn btn-primary margin-top">
+            <ArrowLeft size={16} />
+            <span>Back to Squad Finder</span>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const comp = player.compatibility || { games: 95, skill: 90, playstyle: 94, availability: 89 };
 
@@ -65,15 +104,15 @@ export default function PlayerDetails() {
           <div className="player-header-top">
             <div className="player-avatar-container">
               <img src={player.avatar} alt={player.username} className="player-avatar-large" />
-              <span className={`status-indicator-dot ${player.status.toLowerCase()}`}></span>
+              <span className={`status-indicator-dot ${player.status ? player.status.toLowerCase() : 'online'}`}></span>
             </div>
 
             <div className="player-header-info">
               <div className="player-badge-row">
                 <span className="player-skill-tag">{player.skillLevel}</span>
                 <span className="player-status-tag">
-                  <span className={`status-indicator ${player.status.toLowerCase()}`}></span>
-                  {player.status}
+                  <span className={`status-indicator ${player.status ? player.status.toLowerCase() : 'online'}`}></span>
+                  {player.status || 'Online'}
                 </span>
               </div>
 

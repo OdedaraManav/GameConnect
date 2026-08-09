@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, RotateCcw, Frown, Star, Filter, X, Check } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, SlidersHorizontal, RotateCcw, Frown, Star, Filter, X, Check, Loader2, AlertCircle } from 'lucide-react';
 import GameCard from '../components/GameCard';
-import { MOCK_GAMES } from '../data/mockData';
+import { fetchJson } from '../services/api';
 
-// Filter categories
+// Available filter choices
 const GENRES = [
   'Action',
   'RPG',
@@ -38,6 +38,11 @@ const SORT_OPTIONS = [
 ];
 
 export default function Games() {
+  // State for fetched games, loading, and error
+  const [games, setGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   // State for search, multi-select genres & platforms, rating, and sorting
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenres, setSelectedGenres] = useState([]);
@@ -45,8 +50,26 @@ export default function Games() {
   const [selectedRating, setSelectedRating] = useState(0);
   const [sortBy, setSortBy] = useState('rating-desc');
   
-  // Mobile filter drawer toggle
+  // Mobile filter drawer state
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+  // Fetch games from Express backend GET /api/games
+  const loadGamesFromBackend = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchJson('/games');
+      setGames(data);
+    } catch (err) {
+      setError('Unable to load games. Please make sure the GameConnect server is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGamesFromBackend();
+  }, []);
 
   // Toggle multi-select genre helper
   const toggleGenre = (genre) => {
@@ -85,7 +108,7 @@ export default function Games() {
 
   // Filter and sort games logic (Strict AND logic for multi-select genres & platforms)
   const filteredAndSortedGames = useMemo(() => {
-    return MOCK_GAMES.filter((game) => {
+    return games.filter((game) => {
       // 1. Search Query Filter
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch = !query || (
@@ -122,7 +145,7 @@ export default function Games() {
           return 0;
       }
     });
-  }, [searchQuery, selectedGenres, selectedPlatforms, selectedRating, sortBy]);
+  }, [games, searchQuery, selectedGenres, selectedPlatforms, selectedRating, sortBy]);
 
   return (
     <div className="discovery-page">
@@ -319,8 +342,23 @@ export default function Games() {
               )}
             </div>
 
-            {/* Render Games Grid OR Empty State */}
-            {filteredAndSortedGames.length > 0 ? (
+            {/* Render Loading State, Error State, Games Grid OR Empty State */}
+            {loading ? (
+              <div className="loading-state glass-panel text-center">
+                <Loader2 className="spinner-icon icon-cyan" size={40} />
+                <p>Loading games from Express server...</p>
+              </div>
+            ) : error ? (
+              <div className="error-state glass-panel text-center">
+                <AlertCircle size={48} className="icon-pink margin-b" />
+                <h3 className="error-title">Backend Connection Failed</h3>
+                <p className="error-description">{error}</p>
+                <button className="btn btn-primary margin-top" onClick={loadGamesFromBackend}>
+                  <RotateCcw size={16} />
+                  <span>Retry Connection</span>
+                </button>
+              </div>
+            ) : filteredAndSortedGames.length > 0 ? (
               <div className="discovery-games-grid">
                 {filteredAndSortedGames.map((game) => (
                   <GameCard key={game.id} game={game} />
