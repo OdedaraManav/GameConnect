@@ -12,9 +12,9 @@ async function runAuthTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      username: 'TestPlayer1',
-      email: 'testplayer1@gameconnect.io',
-      password: 'SecurePassword123!'
+      username: 'TestUser1',
+      email: 'test@example.com',
+      password: 'TestPassword123!'
     })
   });
   const regData = await regRes.json();
@@ -26,9 +26,9 @@ async function runAuthTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      username: 'UniqueUser2',
-      email: 'testplayer1@gameconnect.io',
-      password: 'Password123!'
+      username: 'TestUser2',
+      email: 'test@example.com',
+      password: 'TestPassword123!'
     })
   });
   console.log('Status:', dupEmailRes.status, await dupEmailRes.json());
@@ -39,9 +39,9 @@ async function runAuthTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      username: 'TestPlayer1',
-      email: 'differentemail@gameconnect.io',
-      password: 'Password123!'
+      username: 'TestUser1',
+      email: 'another@example.com',
+      password: 'TestPassword123!'
     })
   });
   console.log('Status:', dupUserRes.status, await dupUserRes.json());
@@ -53,7 +53,7 @@ async function runAuthTests() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: 'NoPasswordUser',
-      email: 'nopass@gameconnect.io'
+      email: 'nopassword@example.com'
     })
   });
   console.log('Status:', missingRes.status, await missingRes.json());
@@ -64,8 +64,8 @@ async function runAuthTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'testplayer1@gameconnect.io',
-      password: 'SecurePassword123!'
+      email: 'test@example.com',
+      password: 'TestPassword123!'
     })
   });
   const loginData = await loginRes.json();
@@ -80,8 +80,8 @@ async function runAuthTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'testplayer1@gameconnect.io',
-      password: 'WrongPassword999'
+      email: 'test@example.com',
+      password: 'WrongPassword123!'
     })
   });
   console.log('Status:', wrongPassRes.status, await wrongPassRes.json());
@@ -92,8 +92,8 @@ async function runAuthTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'nobody@gameconnect.io',
-      password: 'SomePassword'
+      email: 'nonexistent@example.com',
+      password: 'TestPassword123!'
     })
   });
   console.log('Status:', noUserRes.status, await noUserRes.json());
