@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import pg from 'pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { authenticateToken } from './middleware/auth.js';
@@ -11,9 +12,15 @@ import { authenticateToken } from './middleware/auth.js';
 dotenv.config();
 
 // Prisma PostgreSQL connection
-const adapter = new PrismaPg({
+const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+pool.on('error', (err) => {
+  console.error('Unexpected PostgreSQL pool error:', err);
+});
+
+const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({
   adapter,
@@ -308,7 +315,17 @@ app.get('/api/players/:id', async (req, res) => {
 });
 
 // Start Express Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🎮 GameConnect Express server is running on port ${PORT}`);
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use by another process.`);
+    process.exit(1);
+  } else {
+    console.error('❌ Server error:', err);
+    process.exit(1);
+  }
 });

@@ -1,12 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { CURRENT_USER } from '../data/mockData';
 import GameCard from '../components/GameCard';
 import { fetchJson } from '../services/api';
 import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2 } from 'lucide-react';
 
 export default function Profile() {
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Redirect to Home (/) if user is not authenticated after initial Auth token check finishes
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   useEffect(() => {
     async function loadGames() {
@@ -20,8 +31,27 @@ export default function Profile() {
         setLoading(false);
       }
     }
-    loadGames();
-  }, []);
+
+    if (isAuthenticated) {
+      loadGames();
+    }
+  }, [isAuthenticated]);
+
+  if (authLoading || !isAuthenticated) {
+    return (
+      <div className="profile-page">
+        <div className="container">
+          <div className="loading-state glass-panel text-center margin-t-lg">
+            <Loader2 className="spinner-icon icon-cyan" size={32} />
+            <p>Checking authentication...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const activeUsername = user?.username || CURRENT_USER.username;
+  const activeAvatar = user?.avatar || CURRENT_USER.avatar;
 
   // Filter favorite games and currently playing games from fetched backend dataset
   const favoriteGames = allGames.filter((g) => CURRENT_USER.favoriteGameIds.includes(g.id));
@@ -34,7 +64,7 @@ export default function Profile() {
         <div className="profile-header-card glass-panel">
           <div className="profile-header-top">
             <div className="profile-avatar-container">
-              <img src={CURRENT_USER.avatar} alt={CURRENT_USER.username} className="profile-avatar-img" />
+              <img src={activeAvatar} alt={activeUsername} className="profile-avatar-img" />
               <span className="profile-status-dot" title={CURRENT_USER.status}></span>
             </div>
 
@@ -46,7 +76,7 @@ export default function Profile() {
                 </span>
               </div>
 
-              <h1 className="profile-username">{CURRENT_USER.username}</h1>
+              <h1 className="profile-username">{activeUsername}</h1>
               <p className="profile-bio">{CURRENT_USER.bio}</p>
 
               <div className="profile-meta-tags">
