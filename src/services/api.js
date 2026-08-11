@@ -99,5 +99,27 @@ export async function removePlayingGame(token, gameId) {
   });
 }
 
+// UserGameProfile API Methods
+export async function createUserGameProfile(token, profileData) {
+  return fetchJson('/user/game-profiles', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(profileData)
+  });
+}
+
+export async function deleteUserGameProfile(token, profileId) {
+  return fetchJson(`/user/game-profiles/${profileId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+}
+
 
 

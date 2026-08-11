@@ -7,7 +7,9 @@ import {
   addFavoriteGame,
   removeFavoriteGame,
   addPlayingGame,
-  removePlayingGame
+  removePlayingGame,
+  createUserGameProfile,
+  deleteUserGameProfile
 } from '../services/api';
 
 const TOKEN_KEY = 'gameconnect_token';
@@ -177,6 +179,38 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Add/Update Game Profile handler
+  const createGameProfile = async (profileData) => {
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) throw new Error('Not authenticated.');
+      const data = await createUserGameProfile(currentToken, profileData);
+      if (data.gameProfiles) {
+        setUser((prev) => (prev ? { ...prev, gameProfiles: data.gameProfiles } : prev));
+        return { success: true, gameProfiles: data.gameProfiles };
+      }
+      throw new Error(data.message || 'Failed to save game profile.');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Delete Game Profile handler
+  const deleteGameProfile = async (profileId) => {
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) throw new Error('Not authenticated.');
+      const data = await deleteUserGameProfile(currentToken, profileId);
+      if (data.gameProfiles) {
+        setUser((prev) => (prev ? { ...prev, gameProfiles: data.gameProfiles } : prev));
+        return { success: true, gameProfiles: data.gameProfiles };
+      }
+      throw new Error(data.message || 'Failed to delete game profile.');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
   // Logout handler
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -197,6 +231,8 @@ export function AuthProvider({ children }) {
     removeFavorite,
     addPlaying,
     removePlaying,
+    createGameProfile,
+    deleteGameProfile,
     logout,
     isAuthenticated: !!user
   };

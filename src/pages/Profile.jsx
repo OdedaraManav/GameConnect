@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { CURRENT_USER } from '../data/mockData';
 import GameCard from '../components/GameCard';
 import { fetchJson } from '../services/api';
-import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check, Plus, Trash2, Star } from 'lucide-react';
+import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check, Plus, Trash2, Star, Target, ShieldCheck, AlertCircle } from 'lucide-react';
 
 import AnalogTimePicker from '../components/AnalogTimePicker';
 
@@ -17,7 +17,9 @@ export default function Profile() {
     addFavorite,
     removeFavorite,
     addPlaying,
-    removePlaying
+    removePlaying,
+    createGameProfile,
+    deleteGameProfile
   } = useAuth();
 
   const navigate = useNavigate();
@@ -45,6 +47,20 @@ export default function Profile() {
   const [addGameModal, setAddGameModal] = useState(null);
   const [gameActionLoading, setGameActionLoading] = useState(false);
 
+  // Game Profile Modal State
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    gameId: '',
+    gamerTag: '',
+    gameAccountId: '',
+    rank: '',
+    level: '',
+    platform: 'PC',
+    region: 'Asia / India'
+  });
+  const [profileSaveLoading, setProfileSaveLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
   // Redirect to Home (/) if user is not authenticated after initial Auth token check finishes
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -58,6 +74,9 @@ export default function Profile() {
         setLoading(true);
         const data = await fetchJson('/games');
         setAllGames(data);
+        if (data.length > 0) {
+          setProfileForm((prev) => ({ ...prev, gameId: data[0].id }));
+        }
       } catch (err) {
         console.error('Error fetching games for profile:', err);
       } finally {
@@ -72,7 +91,7 @@ export default function Profile() {
 
   // Toggle body scroll lock when modal opens/closes
   useEffect(() => {
-    if (isEditing || addGameModal) {
+    if (isEditing || addGameModal || isProfileModalOpen) {
       document.body.classList.add('modal-open');
     } else {
       document.body.classList.remove('modal-open');
@@ -80,7 +99,7 @@ export default function Profile() {
     return () => {
       document.body.classList.remove('modal-open');
     };
-  }, [isEditing, addGameModal]);
+  }, [isEditing, addGameModal, isProfileModalOpen]);
 
   const handleOpenEdit = () => {
     setEditForm({
@@ -151,6 +170,48 @@ export default function Profile() {
     setGameActionLoading(false);
   };
 
+  const handleSaveGameProfile = async (e) => {
+    e.preventDefault();
+    setProfileSaveLoading(true);
+    setProfileError('');
+
+    if (!profileForm.gamerTag.trim()) {
+      setProfileError('GamerTag / In-game handle is required.');
+      setProfileSaveLoading(false);
+      return;
+    }
+
+    const res = await createGameProfile({
+      gameId: profileForm.gameId,
+      gamerTag: profileForm.gamerTag,
+      gameAccountId: profileForm.gameAccountId,
+      rank: profileForm.rank,
+      level: profileForm.level ? parseInt(profileForm.level, 10) : null,
+      platform: profileForm.platform,
+      region: profileForm.region
+    });
+
+    setProfileSaveLoading(false);
+    if (res.success) {
+      setIsProfileModalOpen(false);
+      setProfileForm((prev) => ({
+        ...prev,
+        gamerTag: '',
+        gameAccountId: '',
+        rank: '',
+        level: ''
+      }));
+    } else {
+      setProfileError(res.error || 'Failed to save game profile.');
+    }
+  };
+
+  const handleDeleteGameProfile = async (profileId) => {
+    setGameActionLoading(true);
+    await deleteGameProfile(profileId);
+    setGameActionLoading(false);
+  };
+
   if (authLoading || !isAuthenticated) {
     return (
       <div className="profile-page">
@@ -177,6 +238,7 @@ export default function Profile() {
   // Real authenticated user game relationships from PostgreSQL
   const favoriteGames = user?.favoriteGames || [];
   const currentlyPlayingGames = user?.playingGames || [];
+  const userGameProfiles = user?.gameProfiles || [];
 
   // Available games to add to favorites / currently playing list
   const existingFavIds = favoriteGames.map((g) => g.id);
@@ -497,6 +559,169 @@ export default function Profile() {
           </div>
         )}
 
+        {/* Create Game Profile Modal */}
+        {isProfileModalOpen && (
+          <div className="modal-backdrop" style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}>
+            <div className="modal-dialog-card glass-panel" style={{ maxWidth: '540px' }}>
+              <div className="modal-header-fixed">
+                <h3 className="gradient-text" style={{ fontSize: '1.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Target size={18} className="icon-cyan" /> Add Game Profile
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveGameProfile} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <div className="modal-body-scrollable" style={{ padding: '1.25rem' }}>
+                  {profileError && (
+                    <div style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', fontSize: '0.875rem' }}>
+                      {profileError}
+                    </div>
+                  )}
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>Target Game *</label>
+                    <select
+                      value={profileForm.gameId}
+                      onChange={(e) => setProfileForm({ ...profileForm, gameId: parseInt(e.target.value, 10) })}
+                      className="search-input"
+                      style={{ width: '100%', padding: '0.5rem 0.75rem', background: '#1e293b' }}
+                    >
+                      {allGames.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>
+                      In-Game Handle / GamerTag *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={profileForm.gamerTag}
+                      onChange={(e) => setProfileForm({ ...profileForm, gamerTag: e.target.value })}
+                      className="search-input"
+                      style={{ width: '100%', padding: '0.5rem 0.75rem' }}
+                      placeholder="e.g. ManavViper#1234 or Manav_99"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>
+                      Public Game Account ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={profileForm.gameAccountId}
+                      onChange={(e) => setProfileForm({ ...profileForm, gameAccountId: e.target.value })}
+                      className="search-input"
+                      style={{ width: '100%', padding: '0.5rem 0.75rem' }}
+                      placeholder="e.g. Riot ID, SteamID64, PUBG Account ID"
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>Rank (Optional)</label>
+                      <input
+                        type="text"
+                        value={profileForm.rank}
+                        onChange={(e) => setProfileForm({ ...profileForm, rank: e.target.value })}
+                        className="search-input"
+                        style={{ width: '100%', padding: '0.5rem 0.75rem' }}
+                        placeholder="e.g. Diamond II"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>Level (Optional)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="9999"
+                        value={profileForm.level}
+                        onChange={(e) => setProfileForm({ ...profileForm, level: e.target.value })}
+                        className="search-input"
+                        style={{ width: '100%', padding: '0.5rem 0.75rem' }}
+                        placeholder="e.g. 85"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>Platform</label>
+                      <select
+                        value={profileForm.platform}
+                        onChange={(e) => setProfileForm({ ...profileForm, platform: e.target.value })}
+                        className="search-input"
+                        style={{ width: '100%', padding: '0.5rem 0.75rem', background: '#1e293b' }}
+                      >
+                        <option value="PC">PC</option>
+                        <option value="PlayStation 5">PlayStation 5</option>
+                        <option value="Xbox Series X">Xbox Series X</option>
+                        <option value="Mobile">Mobile</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '0.3rem' }}>Region</label>
+                      <input
+                        type="text"
+                        value={profileForm.region}
+                        onChange={(e) => setProfileForm({ ...profileForm, region: e.target.value })}
+                        className="search-input"
+                        style={{ width: '100%', padding: '0.5rem 0.75rem' }}
+                        placeholder="e.g. Asia / India"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '0.75rem', borderRadius: '8px', background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', fontSize: '0.775rem', color: '#facc15', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                    <span>This profile will be saved as <strong>Self-reported</strong> until verified via official API integration.</span>
+                  </div>
+                </div>
+
+                <div className="modal-footer-fixed">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileModalOpen(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={profileSaveLoading}
+                    className="btn btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    {profileSaveLoading ? <Loader2 className="spinner-icon" size={16} /> : 'Save Game Profile'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Gaming Overview Statistics */}
         <div className="overview-stats-grid">
           <div className="stat-card glass-panel">
@@ -681,6 +906,165 @@ export default function Profile() {
                       >
                         <Trash2 size={14} />
                       </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Game Profiles Section (Optional User-Created Profiles) */}
+            <div className="profile-section margin-t-lg">
+              <div className="section-header-simple" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 className="section-title-sm gradient-text" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Target size={18} className="icon-cyan" /> GAME PROFILES
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(true)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                >
+                  <Plus size={14} /> Add Game Profile
+                </button>
+              </div>
+
+              {userGameProfiles.length === 0 ? (
+                <div className="glass-panel text-center" style={{ padding: '2rem 1.5rem', color: '#94a3b8', borderRadius: '12px' }}>
+                  <p style={{ marginBottom: '0.75rem' }}>No optional game profiles created yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="btn btn-primary btn-sm"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
+                  >
+                    + Add Game Profile
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.25rem' }}>
+                  {userGameProfiles.map((gp) => (
+                    <div
+                      key={gp.id}
+                      className="glass-panel"
+                      style={{
+                        borderRadius: '14px',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        background: 'rgba(15, 22, 36, 0.75)',
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}
+                    >
+                      {/* Card Cover & Header */}
+                      <div style={{ height: '90px', position: 'relative', overflow: 'hidden' }}>
+                        <img
+                          src={gp.game?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80'}
+                          alt={gp.game?.name || 'Game Cover'}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.65)' }}
+                        />
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,22,36,0.95), transparent)' }} />
+                        <span style={{ position: 'absolute', bottom: '8px', left: '12px', fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
+                          {gp.game?.name || 'Game'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGameProfile(gp.id)}
+                          disabled={gameActionLoading}
+                          title="Delete Game Profile"
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'rgba(239, 68, 68, 0.85)',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '26px',
+                            height: '26px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            zIndex: 5
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      {/* Card Body */}
+                      <div style={{ padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
+                        {/* Verification Badge */}
+                        <div>
+                          {gp.verificationStatus === 'VERIFIED' ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '0.2rem 0.6rem',
+                              borderRadius: '20px',
+                              fontSize: '0.725rem',
+                              fontWeight: 600,
+                              background: 'rgba(34, 197, 94, 0.2)',
+                              color: '#4ade80',
+                              border: '1px solid rgba(34, 197, 94, 0.4)'
+                            }}>
+                              <ShieldCheck size={12} /> Verified ✓
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '0.2rem 0.6rem',
+                              borderRadius: '20px',
+                              fontSize: '0.725rem',
+                              fontWeight: 600,
+                              background: 'rgba(234, 179, 8, 0.15)',
+                              color: '#facc15',
+                              border: '1px solid rgba(234, 179, 8, 0.3)'
+                            }}>
+                              <AlertCircle size={12} /> Self-reported / Not verified
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.825rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e2e8f0' }}>
+                            <span style={{ color: '#94a3b8' }}>GamerTag:</span>
+                            <span style={{ fontWeight: 600, color: 'var(--primary-cyan)' }}>{gp.gamerTag}</span>
+                          </div>
+
+                          {gp.rank && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e2e8f0' }}>
+                              <span style={{ color: '#94a3b8' }}>Rank:</span>
+                              <span style={{ fontWeight: 500 }}>{gp.rank}</span>
+                            </div>
+                          )}
+
+                          {gp.level && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e2e8f0' }}>
+                              <span style={{ color: '#94a3b8' }}>Level:</span>
+                              <span style={{ fontWeight: 500 }}>Lvl {gp.level}</span>
+                            </div>
+                          )}
+
+                          {gp.platform && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e2e8f0' }}>
+                              <span style={{ color: '#94a3b8' }}>Platform:</span>
+                              <span>{gp.platform}</span>
+                            </div>
+                          )}
+
+                          {gp.region && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e2e8f0' }}>
+                              <span style={{ color: '#94a3b8' }}>Region:</span>
+                              <span>{gp.region}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

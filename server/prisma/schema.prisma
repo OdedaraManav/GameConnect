@@ -28,6 +28,7 @@ model Game {
 
   favoritedBy     UserFavoriteGame[]
   playedBy        UserPlayingGame[]
+  userProfiles    UserGameProfile[]
 }
 
 model Player {
@@ -73,6 +74,7 @@ model User {
 
   favoriteGames     UserFavoriteGame[]
   playingGames      UserPlayingGame[]
+  gameProfiles      UserGameProfile[]
 }
 
 model UserFavoriteGame {
@@ -101,4 +103,51 @@ model UserPlayingGame {
   @@unique([userId, gameId])
   @@index([userId])
   @@index([gameId])
+}
+
+enum VerificationStatus {
+  SELF_REPORTED
+  VERIFIED
+}
+
+model UserGameProfile {
+  id                 Int                @id @default(autoincrement())
+  userId             Int
+  gameId             Int
+
+  // Identity & Public Identifiers (Not credentials)
+  gamerTag           String
+  gameAccountId      String?
+
+  // Progression & Attributes
+  rank               String?
+  tier               String?
+  level              Int?
+  platform           String?
+  region             String?
+
+  // Game-Specific Statistics (Flexible JSON for stats ONLY)
+  stats              Json?
+
+  // Connection & Verification States (Separated)
+  isAccountConnected Boolean            @default(false)
+  verificationStatus VerificationStatus @default(SELF_REPORTED)
+
+  // Audit Metadata (Server-managed)
+  verifiedAt         DateTime?
+  lastSyncedAt       DateTime?
+  verificationSource String?
+
+  // System Timestamps
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
+  @@index([verificationStatus])
 }

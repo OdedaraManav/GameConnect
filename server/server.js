@@ -115,6 +115,9 @@ app.post('/api/auth/register', async (req, res) => {
         availabilityStart: newUser.availabilityStart,
         availabilityEnd: newUser.availabilityEnd,
         status: newUser.status,
+        favoriteGames: [],
+        playingGames: [],
+        gameProfiles: [],
         createdAt: newUser.createdAt
       }
     });
@@ -140,9 +143,14 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // 2. Find user by email
+    // 2. Find user by email (include favoriteGames, playingGames, and gameProfiles)
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() }
+      where: { email: email.toLowerCase().trim() },
+      include: {
+        favoriteGames: { include: { game: true } },
+        playingGames: { include: { game: true } },
+        gameProfiles: { include: { game: true } }
+      }
     });
 
     if (!user) {
@@ -174,7 +182,7 @@ app.post('/api/auth/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // 5. Return success response with JWT and safe user object
+    // 5. Return success response with JWT and safe user object including relations
     res.json({
       status: 'success',
       message: 'Login successful',
@@ -192,6 +200,9 @@ app.post('/api/auth/login', async (req, res) => {
         availabilityStart: user.availabilityStart,
         availabilityEnd: user.availabilityEnd,
         status: user.status,
+        favoriteGames: user.favoriteGames ? user.favoriteGames.map(fg => fg.game) : [],
+        playingGames: user.playingGames ? user.playingGames.map(pg => pg.game) : [],
+        gameProfiles: user.gameProfiles || [],
         createdAt: user.createdAt
       }
     });
@@ -211,7 +222,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       where: { id: req.user.id },
       include: {
         favoriteGames: { include: { game: true } },
-        playingGames: { include: { game: true } }
+        playingGames: { include: { game: true } },
+        gameProfiles: { include: { game: true } }
       }
     });
 
@@ -239,6 +251,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         status: user.status,
         favoriteGames: user.favoriteGames ? user.favoriteGames.map(fg => fg.game) : [],
         playingGames: user.playingGames ? user.playingGames.map(pg => pg.game) : [],
+        gameProfiles: user.gameProfiles || [],
         createdAt: user.createdAt
       }
     });
@@ -271,7 +284,8 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
       data: updateData,
       include: {
         favoriteGames: { include: { game: true } },
-        playingGames: { include: { game: true } }
+        playingGames: { include: { game: true } },
+        gameProfiles: { include: { game: true } }
       }
     });
 
@@ -293,6 +307,7 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
         status: updatedUser.status,
         favoriteGames: updatedUser.favoriteGames ? updatedUser.favoriteGames.map(fg => fg.game) : [],
         playingGames: updatedUser.playingGames ? updatedUser.playingGames.map(pg => pg.game) : [],
+        gameProfiles: updatedUser.gameProfiles || [],
         createdAt: updatedUser.createdAt
       }
     });
@@ -444,6 +459,114 @@ app.delete('/api/user/playing/:gameId', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error removing playing game:', error);
     res.status(500).json({ status: 'error', message: 'Failed to remove playing game.' });
+  }
+});
+
+// 2.6 UserGameProfile Routes
+
+// POST /api/user/game-profiles — Create or update optional game-specific profile for authenticated user
+app.post('/api/user/game-profiles', authenticateToken, async (req, res) => {
+  try {
+    const { gameId, gamerTag, gameAccountId, rank, tier, level, platform, region, stats } = req.body;
+    const parsedGameId = parseInt(gameId, 10);
+
+    if (Number.isNaN(parsedGameId)) {
+      return res.status(400).json({ status: 'error', message: 'Valid game ID is required.' });
+    }
+
+    if (!gamerTag || !String(gamerTag).trim()) {
+      return res.status(400).json({ status: 'error', message: 'In-game handle (gamerTag) is required.' });
+    }
+
+    const game = await prisma.game.findUnique({ where: { id: parsedGameId } });
+    if (!game) {
+      return res.status(404).json({ status: 'error', message: `Game with ID ${gameId} not found.` });
+    }
+
+    // Force self-reported verification status for user-submitted profiles
+    await prisma.userGameProfile.upsert({
+      where: {
+        userId_gameId: { userId: req.user.id, gameId: parsedGameId }
+      },
+      create: {
+        userId: req.user.id,
+        gameId: parsedGameId,
+        gamerTag: String(gamerTag).trim(),
+        gameAccountId: gameAccountId ? String(gameAccountId).trim() : null,
+        rank: rank ? String(rank).trim() : null,
+        tier: tier ? String(tier).trim() : null,
+        level: level ? parseInt(level, 10) : null,
+        platform: platform ? String(platform).trim() : null,
+        region: region ? String(region).trim() : null,
+        stats: stats && typeof stats === 'object' ? stats : null,
+        isAccountConnected: false,
+        verificationStatus: 'SELF_REPORTED'
+      },
+      update: {
+        gamerTag: String(gamerTag).trim(),
+        gameAccountId: gameAccountId ? String(gameAccountId).trim() : null,
+        rank: rank ? String(rank).trim() : null,
+        tier: tier ? String(tier).trim() : null,
+        level: level ? parseInt(level, 10) : null,
+        platform: platform ? String(platform).trim() : null,
+        region: region ? String(region).trim() : null,
+        stats: stats && typeof stats === 'object' ? stats : null
+      }
+    });
+
+    const userWithProfiles = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { gameProfiles: { include: { game: true } } }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Game profile created/updated successfully.',
+      gameProfiles: userWithProfiles.gameProfiles
+    });
+  } catch (error) {
+    console.error('Error creating game profile:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to save game profile.' });
+  }
+});
+
+// DELETE /api/user/game-profiles/:id — Delete game profile belonging to authenticated user
+app.delete('/api/user/game-profiles/:id', authenticateToken, async (req, res) => {
+  try {
+    const profileId = parseInt(req.params.id, 10);
+    if (Number.isNaN(profileId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid profile ID.' });
+    }
+
+    const existingProfile = await prisma.userGameProfile.findUnique({
+      where: { id: profileId }
+    });
+
+    if (!existingProfile) {
+      return res.status(404).json({ status: 'error', message: 'Game profile not found.' });
+    }
+
+    if (existingProfile.userId !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: 'Unauthorized to delete this game profile.' });
+    }
+
+    await prisma.userGameProfile.delete({
+      where: { id: profileId }
+    });
+
+    const userWithProfiles = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { gameProfiles: { include: { game: true } } }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Game profile deleted successfully.',
+      gameProfiles: userWithProfiles.gameProfiles
+    });
+  } catch (error) {
+    console.error('Error deleting game profile:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to delete game profile.' });
   }
 });
 
