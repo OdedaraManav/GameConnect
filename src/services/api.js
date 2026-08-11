@@ -45,3 +45,15 @@ export async function getAuthMe(token) {
   });
 }
 
+export async function updateUserProfile(token, profileData) {
+  return fetchJson('/auth/profile', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(profileData)
+  });
+}
+
+

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginUser, registerUser, getAuthMe } from '../services/api';
+import { loginUser, registerUser, getAuthMe, updateUserProfile } from '../services/api';
 
 const TOKEN_KEY = 'gameconnect_token';
 
@@ -82,6 +82,28 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Profile update handler
+  const updateProfile = async (profileData) => {
+    setError(null);
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) {
+        throw new Error('Not authenticated.');
+      }
+      const data = await updateUserProfile(currentToken, profileData);
+      if (data.user) {
+        setUser(data.user);
+        return { success: true, user: data.user };
+      } else {
+        throw new Error(data.message || 'Profile update failed.');
+      }
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to update profile.';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  };
+
   // Logout handler
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -97,6 +119,7 @@ export function AuthProvider({ children }) {
     error,
     login,
     register,
+    updateProfile,
     logout,
     isAuthenticated: !!user
   };

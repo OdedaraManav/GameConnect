@@ -52,10 +52,19 @@ model Player {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  username          String   @unique
+  email             String   @unique
+  password          String
+  avatar            String   @default("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80")
+  bio               String   @default("Gamer on GameConnect! Ready for squad matches and casual play.")
+  location          String   @default("Asia / India")
+  platform          String   @default("PC")
+  playstyle         String   @default("Casual & Competitive")
+  availability      String   @default("8:00 PM – 12:00 AM")
+  availabilityStart String   @default("20:00")
+  availabilityEnd   String   @default("00:00")
+  status            String   @default("Online")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

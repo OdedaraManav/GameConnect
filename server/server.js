@@ -106,6 +106,15 @@ app.post('/api/auth/register', async (req, res) => {
         id: newUser.id,
         username: newUser.username,
         email: newUser.email,
+        avatar: newUser.avatar,
+        bio: newUser.bio,
+        location: newUser.location,
+        platform: newUser.platform,
+        playstyle: newUser.playstyle,
+        availability: newUser.availability,
+        availabilityStart: newUser.availabilityStart,
+        availabilityEnd: newUser.availabilityEnd,
+        status: newUser.status,
         createdAt: newUser.createdAt
       }
     });
@@ -173,7 +182,17 @@ app.post('/api/auth/login', async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email
+        email: user.email,
+        avatar: user.avatar,
+        bio: user.bio,
+        location: user.location,
+        platform: user.platform,
+        playstyle: user.playstyle,
+        availability: user.availability,
+        availabilityStart: user.availabilityStart,
+        availabilityEnd: user.availabilityEnd,
+        status: user.status,
+        createdAt: user.createdAt
       }
     });
   } catch (error) {
@@ -185,7 +204,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me — Protected route to test JWT middleware
+// GET /api/auth/me — Protected route to fetch current user profile
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
@@ -205,6 +224,15 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
+        avatar: user.avatar,
+        bio: user.bio,
+        location: user.location,
+        platform: user.platform,
+        playstyle: user.playstyle,
+        availability: user.availability,
+        availabilityStart: user.availabilityStart,
+        availabilityEnd: user.availabilityEnd,
+        status: user.status,
         createdAt: user.createdAt
       }
     });
@@ -212,6 +240,55 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch user profile.'
+    });
+  }
+});
+
+// PUT /api/auth/profile — Protected route to update basic profile fields
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const { avatar, bio, location, platform, playstyle, availability, availabilityStart, availabilityEnd, status } = req.body;
+
+    const updateData = {};
+    if (avatar !== undefined) updateData.avatar = String(avatar).trim();
+    if (bio !== undefined) updateData.bio = String(bio).trim().slice(0, 500);
+    if (location !== undefined) updateData.location = String(location).trim().slice(0, 100);
+    if (platform !== undefined) updateData.platform = String(platform).trim().slice(0, 50);
+    if (playstyle !== undefined) updateData.playstyle = String(playstyle).trim().slice(0, 50);
+    if (availability !== undefined) updateData.availability = String(availability).trim().slice(0, 100);
+    if (availabilityStart !== undefined) updateData.availabilityStart = String(availabilityStart).trim().slice(0, 20);
+    if (availabilityEnd !== undefined) updateData.availabilityEnd = String(availabilityEnd).trim().slice(0, 20);
+    if (status !== undefined) updateData.status = String(status).trim().slice(0, 50);
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: updateData
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Profile updated successfully.',
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        avatar: updatedUser.avatar,
+        bio: updatedUser.bio,
+        location: updatedUser.location,
+        platform: updatedUser.platform,
+        playstyle: updatedUser.playstyle,
+        availability: updatedUser.availability,
+        availabilityStart: updatedUser.availabilityStart,
+        availabilityEnd: updatedUser.availabilityEnd,
+        status: updatedUser.status,
+        createdAt: updatedUser.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update user profile.'
     });
   }
 });
