@@ -208,7 +208,11 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
+      where: { id: req.user.id },
+      include: {
+        favoriteGames: { include: { game: true } },
+        playingGames: { include: { game: true } }
+      }
     });
 
     if (!user) {
@@ -233,6 +237,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         availabilityStart: user.availabilityStart,
         availabilityEnd: user.availabilityEnd,
         status: user.status,
+        favoriteGames: user.favoriteGames ? user.favoriteGames.map(fg => fg.game) : [],
+        playingGames: user.playingGames ? user.playingGames.map(pg => pg.game) : [],
         createdAt: user.createdAt
       }
     });
@@ -262,7 +268,11 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
-      data: updateData
+      data: updateData,
+      include: {
+        favoriteGames: { include: { game: true } },
+        playingGames: { include: { game: true } }
+      }
     });
 
     res.json({
@@ -281,6 +291,8 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
         availabilityStart: updatedUser.availabilityStart,
         availabilityEnd: updatedUser.availabilityEnd,
         status: updatedUser.status,
+        favoriteGames: updatedUser.favoriteGames ? updatedUser.favoriteGames.map(fg => fg.game) : [],
+        playingGames: updatedUser.playingGames ? updatedUser.playingGames.map(pg => pg.game) : [],
         createdAt: updatedUser.createdAt
       }
     });
@@ -290,6 +302,148 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
       status: 'error',
       message: 'Failed to update user profile.'
     });
+  }
+});
+
+// 2.5 User Game Relationships Routes
+
+// POST /api/user/favorites — Add game to authenticated user's favorites
+app.post('/api/user/favorites', authenticateToken, async (req, res) => {
+  try {
+    const { gameId } = req.body;
+    const parsedGameId = parseInt(gameId, 10);
+
+    if (Number.isNaN(parsedGameId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid game ID.' });
+    }
+
+    const game = await prisma.game.findUnique({ where: { id: parsedGameId } });
+    if (!game) {
+      return res.status(404).json({ status: 'error', message: `Game with ID ${gameId} not found.` });
+    }
+
+    await prisma.userFavoriteGame.upsert({
+      where: {
+        userId_gameId: { userId: req.user.id, gameId: parsedGameId }
+      },
+      create: { userId: req.user.id, gameId: parsedGameId },
+      update: {}
+    });
+
+    const userWithFavs = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { favoriteGames: { include: { game: true } } }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Game added to favorites.',
+      favoriteGames: userWithFavs.favoriteGames.map(fg => fg.game)
+    });
+  } catch (error) {
+    console.error('Error adding favorite game:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to add favorite game.' });
+  }
+});
+
+// DELETE /api/user/favorites/:gameId — Remove game from authenticated user's favorites
+app.delete('/api/user/favorites/:gameId', authenticateToken, async (req, res) => {
+  try {
+    const parsedGameId = parseInt(req.params.gameId, 10);
+    if (Number.isNaN(parsedGameId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid game ID.' });
+    }
+
+    await prisma.userFavoriteGame.deleteMany({
+      where: {
+        userId: req.user.id,
+        gameId: parsedGameId
+      }
+    });
+
+    const userWithFavs = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { favoriteGames: { include: { game: true } } }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Game removed from favorites.',
+      favoriteGames: userWithFavs.favoriteGames.map(fg => fg.game)
+    });
+  } catch (error) {
+    console.error('Error removing favorite game:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to remove favorite game.' });
+  }
+});
+
+// POST /api/user/playing — Add game to authenticated user's currently playing list
+app.post('/api/user/playing', authenticateToken, async (req, res) => {
+  try {
+    const { gameId } = req.body;
+    const parsedGameId = parseInt(gameId, 10);
+
+    if (Number.isNaN(parsedGameId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid game ID.' });
+    }
+
+    const game = await prisma.game.findUnique({ where: { id: parsedGameId } });
+    if (!game) {
+      return res.status(404).json({ status: 'error', message: `Game with ID ${gameId} not found.` });
+    }
+
+    await prisma.userPlayingGame.upsert({
+      where: {
+        userId_gameId: { userId: req.user.id, gameId: parsedGameId }
+      },
+      create: { userId: req.user.id, gameId: parsedGameId },
+      update: {}
+    });
+
+    const userWithPlaying = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { playingGames: { include: { game: true } } }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Game added to currently playing list.',
+      playingGames: userWithPlaying.playingGames.map(pg => pg.game)
+    });
+  } catch (error) {
+    console.error('Error adding playing game:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to add playing game.' });
+  }
+});
+
+// DELETE /api/user/playing/:gameId — Remove game from authenticated user's currently playing list
+app.delete('/api/user/playing/:gameId', authenticateToken, async (req, res) => {
+  try {
+    const parsedGameId = parseInt(req.params.gameId, 10);
+    if (Number.isNaN(parsedGameId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid game ID.' });
+    }
+
+    await prisma.userPlayingGame.deleteMany({
+      where: {
+        userId: req.user.id,
+        gameId: parsedGameId
+      }
+    });
+
+    const userWithPlaying = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { playingGames: { include: { game: true } } }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Game removed from currently playing list.',
+      playingGames: userWithPlaying.playingGames.map(pg => pg.game)
+    });
+  } catch (error) {
+    console.error('Error removing playing game:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to remove playing game.' });
   }
 });
 

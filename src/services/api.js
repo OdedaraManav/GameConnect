@@ -56,4 +56,48 @@ export async function updateUserProfile(token, profileData) {
   });
 }
 
+// User ↔ Game Relationship Methods
+export async function addFavoriteGame(token, gameId) {
+  return fetchJson('/user/favorites', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ gameId })
+  });
+}
+
+export async function removeFavoriteGame(token, gameId) {
+  return fetchJson(`/user/favorites/${gameId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+}
+
+export async function addPlayingGame(token, gameId) {
+  return fetchJson('/user/playing', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ gameId })
+  });
+}
+
+export async function removePlayingGame(token, gameId) {
+  return fetchJson(`/user/playing/${gameId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+}
+
+
 

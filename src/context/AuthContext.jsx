@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginUser, registerUser, getAuthMe, updateUserProfile } from '../services/api';
+import {
+  loginUser,
+  registerUser,
+  getAuthMe,
+  updateUserProfile,
+  addFavoriteGame,
+  removeFavoriteGame,
+  addPlayingGame,
+  removePlayingGame
+} from '../services/api';
 
 const TOKEN_KEY = 'gameconnect_token';
 
@@ -104,6 +113,70 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Add Favorite Game handler
+  const addFavorite = async (gameId) => {
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) throw new Error('Not authenticated.');
+      const data = await addFavoriteGame(currentToken, gameId);
+      if (data.favoriteGames) {
+        setUser((prev) => (prev ? { ...prev, favoriteGames: data.favoriteGames } : prev));
+        return { success: true, favoriteGames: data.favoriteGames };
+      }
+      throw new Error(data.message || 'Failed to add favorite.');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Remove Favorite Game handler
+  const removeFavorite = async (gameId) => {
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) throw new Error('Not authenticated.');
+      const data = await removeFavoriteGame(currentToken, gameId);
+      if (data.favoriteGames) {
+        setUser((prev) => (prev ? { ...prev, favoriteGames: data.favoriteGames } : prev));
+        return { success: true, favoriteGames: data.favoriteGames };
+      }
+      throw new Error(data.message || 'Failed to remove favorite.');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Add Playing Game handler
+  const addPlaying = async (gameId) => {
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) throw new Error('Not authenticated.');
+      const data = await addPlayingGame(currentToken, gameId);
+      if (data.playingGames) {
+        setUser((prev) => (prev ? { ...prev, playingGames: data.playingGames } : prev));
+        return { success: true, playingGames: data.playingGames };
+      }
+      throw new Error(data.message || 'Failed to add playing game.');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Remove Playing Game handler
+  const removePlaying = async (gameId) => {
+    try {
+      const currentToken = token || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) throw new Error('Not authenticated.');
+      const data = await removePlayingGame(currentToken, gameId);
+      if (data.playingGames) {
+        setUser((prev) => (prev ? { ...prev, playingGames: data.playingGames } : prev));
+        return { success: true, playingGames: data.playingGames };
+      }
+      throw new Error(data.message || 'Failed to remove playing game.');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
   // Logout handler
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -120,6 +193,10 @@ export function AuthProvider({ children }) {
     login,
     register,
     updateProfile,
+    addFavorite,
+    removeFavorite,
+    addPlaying,
+    removePlaying,
     logout,
     isAuthenticated: !!user
   };

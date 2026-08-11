@@ -25,6 +25,9 @@ model Game {
   publisher       String
   fullDescription String
   screenshots     String[]
+
+  favoritedBy     UserFavoriteGame[]
+  playedBy        UserPlayingGame[]
 }
 
 model Player {
@@ -67,4 +70,35 @@ model User {
   status            String   @default("Online")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  favoriteGames     UserFavoriteGame[]
+  playingGames      UserPlayingGame[]
+}
+
+model UserFavoriteGame {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  gameId    Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
+}
+
+model UserPlayingGame {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  gameId    Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
 }

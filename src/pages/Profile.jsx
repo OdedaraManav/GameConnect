@@ -4,12 +4,22 @@ import { useAuth } from '../context/AuthContext';
 import { CURRENT_USER } from '../data/mockData';
 import GameCard from '../components/GameCard';
 import { fetchJson } from '../services/api';
-import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check } from 'lucide-react';
+import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check, Plus, Trash2, Star } from 'lucide-react';
 
 import AnalogTimePicker from '../components/AnalogTimePicker';
 
 export default function Profile() {
-  const { user, isAuthenticated, loading: authLoading, updateProfile } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    loading: authLoading,
+    updateProfile,
+    addFavorite,
+    removeFavorite,
+    addPlaying,
+    removePlaying
+  } = useAuth();
+
   const navigate = useNavigate();
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +40,10 @@ export default function Profile() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
+
+  // Add Game Modal State ('favorite' | 'playing' | null)
+  const [addGameModal, setAddGameModal] = useState(null);
+  const [gameActionLoading, setGameActionLoading] = useState(false);
 
   // Redirect to Home (/) if user is not authenticated after initial Auth token check finishes
   useEffect(() => {
@@ -58,7 +72,7 @@ export default function Profile() {
 
   // Toggle body scroll lock when modal opens/closes
   useEffect(() => {
-    if (isEditing) {
+    if (isEditing || addGameModal) {
       document.body.classList.add('modal-open');
     } else {
       document.body.classList.remove('modal-open');
@@ -66,7 +80,7 @@ export default function Profile() {
     return () => {
       document.body.classList.remove('modal-open');
     };
-  }, [isEditing]);
+  }, [isEditing, addGameModal]);
 
   const handleOpenEdit = () => {
     setEditForm({
@@ -114,6 +128,29 @@ export default function Profile() {
     }));
   };
 
+  const handleAddGame = async (gameId) => {
+    setGameActionLoading(true);
+    if (addGameModal === 'favorite') {
+      await addFavorite(gameId);
+    } else if (addGameModal === 'playing') {
+      await addPlaying(gameId);
+    }
+    setGameActionLoading(false);
+    setAddGameModal(null);
+  };
+
+  const handleRemoveFavorite = async (gameId) => {
+    setGameActionLoading(true);
+    await removeFavorite(gameId);
+    setGameActionLoading(false);
+  };
+
+  const handleRemovePlaying = async (gameId) => {
+    setGameActionLoading(true);
+    await removePlaying(gameId);
+    setGameActionLoading(false);
+  };
+
   if (authLoading || !isAuthenticated) {
     return (
       <div className="profile-page">
@@ -137,9 +174,19 @@ export default function Profile() {
   const activeAvailability = user?.availability || CURRENT_USER.availability;
   const activeStatus = user?.status || CURRENT_USER.status;
 
-  // Filter favorite games and currently playing games from fetched backend dataset (using mock IDs for now)
-  const favoriteGames = allGames.filter((g) => CURRENT_USER.favoriteGameIds.includes(g.id));
-  const currentlyPlayingGames = allGames.filter((g) => CURRENT_USER.currentlyPlayingIds.includes(g.id));
+  // Real authenticated user game relationships from PostgreSQL
+  const favoriteGames = user?.favoriteGames || [];
+  const currentlyPlayingGames = user?.playingGames || [];
+
+  // Available games to add to favorites / currently playing list
+  const existingFavIds = favoriteGames.map((g) => g.id);
+  const existingPlayingIds = currentlyPlayingGames.map((g) => g.id);
+
+  const availableGamesToAdd = allGames.filter((g) => {
+    if (addGameModal === 'favorite') return !existingFavIds.includes(g.id);
+    if (addGameModal === 'playing') return !existingPlayingIds.includes(g.id);
+    return true;
+  });
 
   return (
     <div className="profile-page">
@@ -348,6 +395,108 @@ export default function Profile() {
           </div>
         )}
 
+        {/* Add Game Selection Modal */}
+        {addGameModal && (
+          <div className="modal-backdrop" style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}>
+            <div className="modal-dialog-card glass-panel" style={{ maxWidth: '640px' }}>
+              <div className="modal-header-fixed">
+                <h3 className="gradient-text" style={{ fontSize: '1.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {addGameModal === 'favorite' ? (
+                    <>
+                      <Star size={18} className="icon-cyan" /> Select Favorite Game
+                    </>
+                  ) : (
+                    <>
+                      <Gamepad2 size={18} className="icon-pink" /> Select Currently Playing Game
+                    </>
+                  )}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setAddGameModal(null)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="modal-body-scrollable" style={{ padding: '1.25rem' }}>
+                {availableGamesToAdd.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8' }}>
+                    <p style={{ fontSize: '0.95rem' }}>All available games in the catalog have already been added to your profile!</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
+                    {availableGamesToAdd.map((game) => (
+                      <div
+                        key={game.id}
+                        onClick={() => !gameActionLoading && handleAddGame(game.id)}
+                        className="glass-panel"
+                        style={{
+                          cursor: 'pointer',
+                          borderRadius: '12px',
+                          overflow: 'hidden',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          background: 'rgba(18, 24, 38, 0.7)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = addGameModal === 'favorite' ? '#00F2FE' : '#FF2A85';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        <img src={game.image} alt={game.name} style={{ width: '100%', height: '110px', objectFit: 'cover' }} />
+                        <div style={{ padding: '0.65rem 0.75rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                          <div>
+                            <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f3f4f6', marginBottom: '2px', lineHeight: 1.3 }}>
+                              {game.name}
+                            </h4>
+                            <span style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{game.genre}</span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={gameActionLoading}
+                            className={`btn ${addGameModal === 'favorite' ? 'btn-primary' : 'btn-accent'} btn-sm`}
+                            style={{ marginTop: '10px', padding: '5px 10px', fontSize: '0.75rem', width: '100%', justifyContent: 'center' }}
+                          >
+                            + Add Game
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer-fixed">
+                <button
+                  type="button"
+                  onClick={() => setAddGameModal(null)}
+                  className="btn btn-secondary"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Gaming Overview Statistics */}
         <div className="overview-stats-grid">
           <div className="stat-card glass-panel">
@@ -396,18 +545,71 @@ export default function Profile() {
           <div className="profile-main-content">
             {/* Favorite Games Section */}
             <div className="profile-section">
-              <div className="section-header-simple">
-                <h2 className="section-title-sm gradient-text">FAVORITE GAMES</h2>
+              <div className="section-header-simple" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 className="section-title-sm gradient-text" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Star size={18} className="icon-cyan" /> FAVORITE GAMES
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setAddGameModal('favorite')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                >
+                  <Plus size={14} /> Add Favorite
+                </button>
               </div>
+
               {loading ? (
                 <div className="loading-state glass-panel text-center">
                   <Loader2 className="spinner-icon icon-cyan" size={32} />
                   <p>Loading favorite games...</p>
                 </div>
+              ) : favoriteGames.length === 0 ? (
+                <div className="glass-panel text-center" style={{ padding: '2rem 1.5rem', color: '#94a3b8', borderRadius: '12px' }}>
+                  <p style={{ marginBottom: '0.75rem' }}>No favorite games added yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => setAddGameModal('favorite')}
+                    className="btn btn-primary btn-sm"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
+                  >
+                    + Add Favorite Game
+                  </button>
+                </div>
               ) : (
                 <div className="profile-games-grid">
                   {favoriteGames.map((game) => (
-                    <GameCard key={game.id} game={game} />
+                    <div key={game.id} style={{ position: 'relative' }}>
+                      <GameCard game={game} />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFavorite(game.id)}
+                        disabled={gameActionLoading}
+                        title="Remove from Favorites"
+                        style={{
+                          position: 'absolute',
+                          top: '10px',
+                          right: '10px',
+                          background: 'rgba(239, 68, 68, 0.85)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          borderRadius: '50%',
+                          width: '30px',
+                          height: '30px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          zIndex: 5,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#ef4444'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.85)'}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -415,18 +617,71 @@ export default function Profile() {
 
             {/* Currently Playing Section */}
             <div className="profile-section margin-t-lg">
-              <div className="section-header-simple">
-                <h2 className="section-title-sm gradient-text">CURRENTLY PLAYING</h2>
+              <div className="section-header-simple" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 className="section-title-sm gradient-text" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Gamepad2 size={18} className="icon-pink" /> CURRENTLY PLAYING
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setAddGameModal('playing')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                >
+                  <Plus size={14} /> Add Playing Game
+                </button>
               </div>
+
               {loading ? (
                 <div className="loading-state glass-panel text-center">
                   <Loader2 className="spinner-icon icon-cyan" size={32} />
                   <p>Loading active games...</p>
                 </div>
+              ) : currentlyPlayingGames.length === 0 ? (
+                <div className="glass-panel text-center" style={{ padding: '2rem 1.5rem', color: '#94a3b8', borderRadius: '12px' }}>
+                  <p style={{ marginBottom: '0.75rem' }}>No games added to currently playing list.</p>
+                  <button
+                    type="button"
+                    onClick={() => setAddGameModal('playing')}
+                    className="btn btn-accent btn-sm"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
+                  >
+                    + Add Playing Game
+                  </button>
+                </div>
               ) : (
                 <div className="profile-games-grid">
                   {currentlyPlayingGames.map((game) => (
-                    <GameCard key={game.id} game={game} />
+                    <div key={game.id} style={{ position: 'relative' }}>
+                      <GameCard game={game} />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePlaying(game.id)}
+                        disabled={gameActionLoading}
+                        title="Remove from Currently Playing"
+                        style={{
+                          position: 'absolute',
+                          top: '10px',
+                          right: '10px',
+                          background: 'rgba(239, 68, 68, 0.85)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          borderRadius: '50%',
+                          width: '30px',
+                          height: '30px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          zIndex: 5,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#ef4444'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.85)'}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
