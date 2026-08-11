@@ -121,5 +121,87 @@ export async function deleteUserGameProfile(token, profileId) {
   });
 }
 
+// Social Foundation API Methods
+export async function searchUsers(token, query) {
+  return fetchJson(`/users/search?q=${encodeURIComponent(query)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function sendFriendRequest(token, receiverId) {
+  return fetchJson('/social/requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ receiverId })
+  });
+}
+
+export async function getIncomingFriendRequests(token) {
+  return fetchJson('/social/requests/incoming', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function getOutgoingFriendRequests(token) {
+  return fetchJson('/social/requests/outgoing', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function acceptFriendRequest(token, requestId) {
+  return fetchJson(`/social/requests/${requestId}/accept`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function rejectFriendRequest(token, requestId) {
+  return fetchJson(`/social/requests/${requestId}/reject`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function getFriendsList(token) {
+  return fetchJson('/social/friends', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function removeFriend(token, friendId) {
+  return fetchJson(`/social/friends/${friendId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function blockUser(token, targetUserId) {
+  return fetchJson('/social/block', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ targetUserId })
+  });
+}
+
+export async function unblockUser(token, targetUserId) {
+  return fetchJson(`/social/block/${targetUserId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function getBlockedUsers(token) {
+  return fetchJson('/social/blocked', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+
 
 

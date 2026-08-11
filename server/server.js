@@ -570,6 +570,466 @@ app.delete('/api/user/game-profiles/:id', authenticateToken, async (req, res) =>
   }
 });
 
+// Canonical helper function for normalized mutual friendships
+function getCanonicalPair(id1, id2) {
+  return {
+    userAId: Math.min(id1, id2),
+    userBId: Math.max(id1, id2)
+  };
+}
+
+// 2.7 Social Foundation Routes
+
+// GET /api/users/search — Search users by username (excluding self, blocked users, & sensitive data)
+app.get('/api/users/search', authenticateToken, async (req, res) => {
+  try {
+    const query = String(req.query.q || '').trim();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    if (!query) {
+      return res.json({ status: 'success', users: [], page, total: 0 });
+    }
+
+    // Find users blocked by current user or who blocked current user
+    const blocks = await prisma.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: req.user.id },
+          { blockedId: req.user.id }
+        ]
+      }
+    });
+
+    const blockedUserIds = blocks.map(b => b.blockerId === req.user.id ? b.blockedId : b.blockerId);
+    const excludedIds = [req.user.id, ...blockedUserIds];
+
+    const [users, totalCount] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          username: { contains: query, mode: 'insensitive' },
+          id: { notIn: excludedIds }
+        },
+        select: {
+          id: true,
+          username: true,
+          avatar: true,
+          platform: true,
+          playstyle: true
+        },
+        skip,
+        take: limit
+      }),
+      prisma.user.count({
+        where: {
+          username: { contains: query, mode: 'insensitive' },
+          id: { notIn: excludedIds }
+        }
+      })
+    ]);
+
+    res.json({
+      status: 'success',
+      users,
+      page,
+      limit,
+      total: totalCount
+    });
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to search users.' });
+  }
+});
+
+// POST /api/social/requests — Send friend request (with reciprocal auto-accept check)
+app.post('/api/social/requests', authenticateToken, async (req, res) => {
+  try {
+    const { receiverId } = req.body;
+    const targetId = parseInt(receiverId, 10);
+
+    if (Number.isNaN(targetId) || targetId === req.user.id) {
+      return res.status(400).json({ status: 'error', message: 'Invalid target user for friend request.' });
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!targetUser) {
+      return res.status(404).json({ status: 'error', message: 'Target user not found.' });
+    }
+
+    // Check if block exists
+    const blockCount = await prisma.userBlock.count({
+      where: {
+        OR: [
+          { blockerId: req.user.id, blockedId: targetId },
+          { blockerId: targetId, blockedId: req.user.id }
+        ]
+      }
+    });
+    if (blockCount > 0) {
+      return res.status(400).json({ status: 'error', message: 'Cannot send friend request to this user.' });
+    }
+
+    // Check if already friends using canonical pair
+    const canonical = getCanonicalPair(req.user.id, targetId);
+    const existingFriendship = await prisma.friendship.findUnique({
+      where: { userAId_userBId: canonical }
+    });
+    if (existingFriendship) {
+      return res.status(400).json({ status: 'error', message: 'You are already friends with this user.' });
+    }
+
+    // Check if reciprocal pending request exists (targetId -> req.user.id)
+    const reciprocalRequest = await prisma.friendRequest.findUnique({
+      where: {
+        senderId_receiverId: { senderId: targetId, receiverId: req.user.id }
+      }
+    });
+
+    if (reciprocalRequest && reciprocalRequest.status === 'PENDING') {
+      // Reciprocal Auto-Accept in Transaction
+      await prisma.$transaction([
+        prisma.friendRequest.deleteMany({
+          where: {
+            OR: [
+              { senderId: targetId, receiverId: req.user.id },
+              { senderId: req.user.id, receiverId: targetId }
+            ]
+          }
+        }),
+        prisma.friendship.create({
+          data: canonical
+        })
+      ]);
+
+      return res.json({
+        status: 'success',
+        message: 'Reciprocal request detected! You are now friends.',
+        isFriend: true
+      });
+    }
+
+    // Upsert outgoing friend request
+    await prisma.friendRequest.upsert({
+      where: {
+        senderId_receiverId: { senderId: req.user.id, receiverId: targetId }
+      },
+      create: {
+        senderId: req.user.id,
+        receiverId: targetId,
+        status: 'PENDING'
+      },
+      update: {
+        status: 'PENDING'
+      }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Friend request sent.'
+    });
+  } catch (error) {
+    console.error('Error sending friend request:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to send friend request.' });
+  }
+});
+
+// GET /api/social/requests/incoming — Fetch received pending friend requests
+app.get('/api/social/requests/incoming', authenticateToken, async (req, res) => {
+  try {
+    const requests = await prisma.friendRequest.findMany({
+      where: {
+        receiverId: req.user.id,
+        status: 'PENDING'
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            platform: true,
+            playstyle: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ status: 'success', requests });
+  } catch (error) {
+    console.error('Error fetching incoming friend requests:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch incoming requests.' });
+  }
+});
+
+// GET /api/social/requests/outgoing — Fetch sent pending friend requests
+app.get('/api/social/requests/outgoing', authenticateToken, async (req, res) => {
+  try {
+    const requests = await prisma.friendRequest.findMany({
+      where: {
+        senderId: req.user.id,
+        status: 'PENDING'
+      },
+      include: {
+        receiver: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            platform: true,
+            playstyle: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ status: 'success', requests });
+  } catch (error) {
+    console.error('Error fetching outgoing friend requests:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch outgoing requests.' });
+  }
+});
+
+// POST /api/social/requests/:id/accept — Accept received friend request
+app.post('/api/social/requests/:id/accept', authenticateToken, async (req, res) => {
+  try {
+    const requestId = parseInt(req.params.id, 10);
+    if (Number.isNaN(requestId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid request ID.' });
+    }
+
+    const request = await prisma.friendRequest.findUnique({
+      where: { id: requestId }
+    });
+
+    if (!request) {
+      return res.status(404).json({ status: 'error', message: 'Friend request not found.' });
+    }
+
+    // Security check: receiver MUST be req.user.id
+    if (request.receiverId !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: 'Unauthorized to accept this request.' });
+    }
+
+    const canonical = getCanonicalPair(request.senderId, request.receiverId);
+
+    await prisma.$transaction([
+      prisma.friendRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: request.senderId, receiverId: request.receiverId },
+            { senderId: request.receiverId, receiverId: request.senderId }
+          ]
+        }
+      }),
+      prisma.friendship.upsert({
+        where: { userAId_userBId: canonical },
+        create: canonical,
+        update: {}
+      })
+    ]);
+
+    res.json({ status: 'success', message: 'Friend request accepted!' });
+  } catch (error) {
+    console.error('Error accepting friend request:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to accept friend request.' });
+  }
+});
+
+// POST /api/social/requests/:id/reject — Reject received friend request
+app.post('/api/social/requests/:id/reject', authenticateToken, async (req, res) => {
+  try {
+    const requestId = parseInt(req.params.id, 10);
+    if (Number.isNaN(requestId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid request ID.' });
+    }
+
+    const request = await prisma.friendRequest.findUnique({
+      where: { id: requestId }
+    });
+
+    if (!request) {
+      return res.status(404).json({ status: 'error', message: 'Friend request not found.' });
+    }
+
+    // Security check: receiver MUST be req.user.id
+    if (request.receiverId !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: 'Unauthorized to reject this request.' });
+    }
+
+    await prisma.friendRequest.delete({ where: { id: requestId } });
+
+    res.json({ status: 'success', message: 'Friend request rejected.' });
+  } catch (error) {
+    console.error('Error rejecting friend request:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to reject friend request.' });
+  }
+});
+
+// GET /api/social/friends — Fetch authenticated user's friends with presence information
+app.get('/api/social/friends', authenticateToken, async (req, res) => {
+  try {
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        OR: [
+          { userAId: req.user.id },
+          { userBId: req.user.id }
+        ]
+      },
+      include: {
+        userA: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            bio: true,
+            location: true,
+            platform: true,
+            playstyle: true,
+            availability: true,
+            status: true
+          }
+        },
+        userB: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            bio: true,
+            location: true,
+            platform: true,
+            playstyle: true,
+            availability: true,
+            status: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Map to friend list and include presence authorization
+    const friends = friendships.map(f => {
+      const friendObj = f.userAId === req.user.id ? f.userB : f.userA;
+      return {
+        ...friendObj,
+        friendshipId: f.id,
+        friendsSince: f.createdAt
+      };
+    });
+
+    res.json({ status: 'success', friends });
+  } catch (error) {
+    console.error('Error fetching friends:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch friends list.' });
+  }
+});
+
+// DELETE /api/social/friends/:friendId — Unfriend user
+app.delete('/api/social/friends/:friendId', authenticateToken, async (req, res) => {
+  try {
+    const friendId = parseInt(req.params.friendId, 10);
+    if (Number.isNaN(friendId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid friend ID.' });
+    }
+
+    const canonical = getCanonicalPair(req.user.id, friendId);
+
+    await prisma.friendship.deleteMany({
+      where: canonical
+    });
+
+    res.json({ status: 'success', message: 'User removed from friends list.' });
+  } catch (error) {
+    console.error('Error unfriending user:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to remove friend.' });
+  }
+});
+
+// POST /api/social/block — Block user (terminates friendship & requests in both directions)
+app.post('/api/social/block', authenticateToken, async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+    const targetId = parseInt(targetUserId, 10);
+
+    if (Number.isNaN(targetId) || targetId === req.user.id) {
+      return res.status(400).json({ status: 'error', message: 'Invalid user to block.' });
+    }
+
+    const canonical = getCanonicalPair(req.user.id, targetId);
+
+    await prisma.$transaction([
+      prisma.userBlock.upsert({
+        where: {
+          blockerId_blockedId: { blockerId: req.user.id, blockedId: targetId }
+        },
+        create: { blockerId: req.user.id, blockedId: targetId },
+        update: {}
+      }),
+      prisma.friendship.deleteMany({ where: canonical }),
+      prisma.friendRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: req.user.id, receiverId: targetId },
+            { senderId: targetId, receiverId: req.user.id }
+          ]
+        }
+      })
+    ]);
+
+    res.json({ status: 'success', message: 'User blocked.' });
+  } catch (error) {
+    console.error('Error blocking user:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to block user.' });
+  }
+});
+
+// DELETE /api/social/block/:targetUserId — Unblock user (returns relationship to Neutral)
+app.delete('/api/social/block/:targetUserId', authenticateToken, async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.targetUserId, 10);
+    if (Number.isNaN(targetId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid target user ID.' });
+    }
+
+    await prisma.userBlock.deleteMany({
+      where: { blockerId: req.user.id, blockedId: targetId }
+    });
+
+    res.json({ status: 'success', message: 'User unblocked.' });
+  } catch (error) {
+    console.error('Error unblocking user:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to unblock user.' });
+  }
+});
+
+// GET /api/social/blocked — Fetch list of users blocked by authenticated user
+app.get('/api/social/blocked', authenticateToken, async (req, res) => {
+  try {
+    const blocks = await prisma.userBlock.findMany({
+      where: { blockerId: req.user.id },
+      include: {
+        blocked: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            platform: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const blockedUsers = blocks.map(b => b.blocked);
+    res.json({ status: 'success', blockedUsers });
+  } catch (error) {
+    console.error('Error fetching blocked users:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch blocked list.' });
+  }
+});
+
 // 3. Games API Routes
 
 // GET /api/games — Return all games

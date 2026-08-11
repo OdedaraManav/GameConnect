@@ -7,6 +7,8 @@ import { fetchJson } from '../services/api';
 import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check, Plus, Trash2, Star, Target, ShieldCheck, AlertCircle } from 'lucide-react';
 
 import AnalogTimePicker from '../components/AnalogTimePicker';
+import SocialModal from '../components/SocialModal';
+import { Users } from 'lucide-react';
 
 export default function Profile() {
   const {
@@ -25,6 +27,9 @@ export default function Profile() {
   const navigate = useNavigate();
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Social Modal State
+  const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
 
   // Edit Profile Modal State
   const [isEditing, setIsEditing] = useState(false);
@@ -269,13 +274,22 @@ export default function Profile() {
                     <span className="status-indicator"></span> {activeStatus}
                   </span>
                 </div>
-                <button
-                  onClick={handleOpenEdit}
-                  className="btn btn-secondary btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                >
-                  <Edit3 size={14} /> Edit Profile
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => setIsSocialModalOpen(true)}
+                    className="btn btn-primary btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  >
+                    <Users size={14} /> Social & Friends
+                  </button>
+                  <button
+                    onClick={handleOpenEdit}
+                    className="btn btn-secondary btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  >
+                    <Edit3 size={14} /> Edit Profile
+                  </button>
+                </div>
               </div>
 
               <h1 className="profile-username">{activeUsername}</h1>
@@ -1137,6 +1151,12 @@ export default function Profile() {
           </aside>
         </div>
       </div>
+
+      {/* Social & Friends Network Modal */}
+      <SocialModal
+        isOpen={isSocialModalOpen}
+        onClose={() => setIsSocialModalOpen(false)}
+      />
     </div>
   );
 }
