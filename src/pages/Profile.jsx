@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { CURRENT_USER } from '../data/mockData';
 import GameCard from '../components/GameCard';
-import { fetchJson } from '../services/api';
+import { fetchJson, getIncomingFriendRequests } from '../services/api';
 import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check, Plus, Trash2, Star, Target, ShieldCheck, AlertCircle } from 'lucide-react';
 
 import AnalogTimePicker from '../components/AnalogTimePicker';
@@ -13,6 +13,7 @@ import { Users } from 'lucide-react';
 export default function Profile() {
   const {
     user,
+    token,
     isAuthenticated,
     loading: authLoading,
     updateProfile,
@@ -28,8 +29,9 @@ export default function Profile() {
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Social Modal State
+  // Social Modal & Pending Requests State
   const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
   // Edit Profile Modal State
   const [isEditing, setIsEditing] = useState(false);
@@ -93,6 +95,26 @@ export default function Profile() {
       loadGames();
     }
   }, [isAuthenticated]);
+
+  // Fetch pending incoming friend requests count for notification badge
+  useEffect(() => {
+    async function fetchPendingRequests() {
+      if (!token || !isAuthenticated) {
+        setPendingRequestCount(0);
+        return;
+      }
+      try {
+        const res = await getIncomingFriendRequests(token);
+        if (res && res.requests) {
+          setPendingRequestCount(res.requests.length);
+        }
+      } catch (err) {
+        console.error('Error fetching incoming friend requests:', err);
+      }
+    }
+
+    fetchPendingRequests();
+  }, [token, isAuthenticated]);
 
   // Toggle body scroll lock when modal opens/closes
   useEffect(() => {
@@ -278,9 +300,31 @@ export default function Profile() {
                   <button
                     onClick={() => setIsSocialModalOpen(true)}
                     className="btn btn-primary btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem', position: 'relative' }}
                   >
                     <Users size={14} /> Social & Friends
+                    {pendingRequestCount > 0 && (
+                      <span
+                        className="social-pending-badge"
+                        data-testid="social-friends-badge"
+                        style={{
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '0.725rem',
+                          fontWeight: '700',
+                          padding: '0.1rem 0.45rem',
+                          borderRadius: '9999px',
+                          lineHeight: '1',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
+                          marginLeft: '0.2rem'
+                        }}
+                      >
+                        {pendingRequestCount}
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={handleOpenEdit}
@@ -1156,6 +1200,7 @@ export default function Profile() {
       <SocialModal
         isOpen={isSocialModalOpen}
         onClose={() => setIsSocialModalOpen(false)}
+        onRequestCountChange={(count) => setPendingRequestCount(count)}
       />
     </div>
   );

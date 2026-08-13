@@ -30,7 +30,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-export default function SocialModal({ isOpen, onClose }) {
+export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
   const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'requests' | 'search' | 'blocked'
 
@@ -61,15 +61,19 @@ export default function SocialModal({ isOpen, onClose }) {
     setLoading(true);
     setFeedback({ type: '', message: '' });
     try {
+      // Always fetch incoming requests to keep badge count in sync
+      const incRes = await getIncomingFriendRequests(token);
+      const incList = incRes.requests || [];
+      setIncomingRequests(incList);
+      if (onRequestCountChange) {
+        onRequestCountChange(incList.length);
+      }
+
       if (activeTab === 'friends') {
         const res = await getFriendsList(token);
         setFriends(res.friends || []);
       } else if (activeTab === 'requests') {
-        const [incRes, outRes] = await Promise.all([
-          getIncomingFriendRequests(token),
-          getOutgoingFriendRequests(token)
-        ]);
-        setIncomingRequests(incRes.requests || []);
+        const outRes = await getOutgoingFriendRequests(token);
         setOutgoingRequests(outRes.requests || []);
       } else if (activeTab === 'blocked') {
         const res = await getBlockedUsers(token);
@@ -118,7 +122,13 @@ export default function SocialModal({ isOpen, onClose }) {
     try {
       await acceptFriendRequest(token, requestId);
       setFeedback({ type: 'success', message: 'Friend request accepted!' });
-      setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
+      setIncomingRequests(prev => {
+        const updated = prev.filter(r => r.id !== requestId);
+        if (onRequestCountChange) {
+          onRequestCountChange(updated.length);
+        }
+        return updated;
+      });
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'Failed to accept request.' });
     } finally {
@@ -132,7 +142,13 @@ export default function SocialModal({ isOpen, onClose }) {
     try {
       await rejectFriendRequest(token, requestId);
       setFeedback({ type: 'success', message: 'Friend request rejected.' });
-      setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
+      setIncomingRequests(prev => {
+        const updated = prev.filter(r => r.id !== requestId);
+        if (onRequestCountChange) {
+          onRequestCountChange(updated.length);
+        }
+        return updated;
+      });
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'Failed to reject request.' });
     } finally {
@@ -161,7 +177,13 @@ export default function SocialModal({ isOpen, onClose }) {
       await blockUser(token, targetUserId);
       setFeedback({ type: 'success', message: 'User blocked.' });
       setFriends(prev => prev.filter(f => f.id !== targetUserId));
-      setIncomingRequests(prev => prev.filter(r => r.senderId !== targetUserId));
+      setIncomingRequests(prev => {
+        const updated = prev.filter(r => r.senderId !== targetUserId);
+        if (onRequestCountChange) {
+          onRequestCountChange(updated.length);
+        }
+        return updated;
+      });
       setOutgoingRequests(prev => prev.filter(r => r.receiverId !== targetUserId));
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'Failed to block user.' });
