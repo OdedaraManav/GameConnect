@@ -5,6 +5,8 @@ import {
   sendFriendRequest,
   getIncomingFriendRequests,
   getOutgoingFriendRequests,
+  getAcceptedFriendRequests,
+  clearAcceptedFriendRequests,
   acceptFriendRequest,
   rejectFriendRequest,
   getFriendsList,
@@ -30,7 +32,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
+export default function SocialModal({ isOpen, onClose, onRequestCountChange, onAcceptedCountChange }) {
   const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'requests' | 'search' | 'blocked'
 
@@ -39,6 +41,7 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [acceptedNotifications, setAcceptedNotifications] = useState([]);
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,6 +70,14 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
       setIncomingRequests(incList);
       if (onRequestCountChange) {
         onRequestCountChange(incList.length);
+      }
+
+      // Check for newly accepted friend notifications
+      const accRes = await getAcceptedFriendRequests(token).catch(() => ({ requests: [] }));
+      const accList = accRes.requests || [];
+      setAcceptedNotifications(accList);
+      if (onAcceptedCountChange) {
+        onAcceptedCountChange(accList.length);
       }
 
       if (activeTab === 'friends') {
@@ -129,6 +140,7 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
         }
         return updated;
       });
+      window.dispatchEvent(new Event('social_data_changed'));
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'Failed to accept request.' });
     } finally {
@@ -149,6 +161,7 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
         }
         return updated;
       });
+      window.dispatchEvent(new Event('social_data_changed'));
     } catch (err) {
       setFeedback({ type: 'error', message: err.message || 'Failed to reject request.' });
     } finally {
@@ -204,6 +217,19 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  const handleDismissModalNotification = async () => {
+    setAcceptedNotifications([]);
+    try {
+      await clearAcceptedFriendRequests(token);
+    } catch (err) {
+      console.error('Error clearing accepted notification:', err);
+    }
+    if (onAcceptedCountChange) {
+      onAcceptedCountChange(0);
+    }
+    window.dispatchEvent(new Event('social_data_changed'));
   };
 
   if (!isOpen) return null;
@@ -345,6 +371,39 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
           </div>
         )}
 
+        {/* Newly Accepted Friend Request Notification Banner */}
+        {acceptedNotifications.length > 0 && (
+          <div
+            data-testid="accepted-friend-banner"
+            style={{
+              padding: '0.65rem 1rem',
+              background: 'rgba(34, 197, 94, 0.15)',
+              borderBottom: '1px solid rgba(34, 197, 94, 0.3)',
+              color: '#4ade80',
+              fontSize: '0.825rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <CheckCircle size={16} />
+              <span>
+                <strong>Friend Request Accepted!</strong> {acceptedNotifications.map(u => u.username).join(', ')} accepted your friend request.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleDismissModalNotification}
+              style={{ background: 'none', border: 'none', color: '#4ade80', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+              title="Dismiss notification"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Scrollable Tab Content Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
           {loading ? (
@@ -406,9 +465,25 @@ export default function SocialModal({ isOpen, onClose, onRequestCountChange }) {
                             </div>
 
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc', margin: 0 }}>
-                                {friend.username}
-                              </h4>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc', margin: 0 }}>
+                                  {friend.username}
+                                </h4>
+                                {acceptedNotifications.some(a => a.id === friend.id) && (
+                                  <span style={{
+                                    fontSize: '0.65rem',
+                                    color: '#4ade80',
+                                    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                                    border: '1px solid rgba(34, 197, 94, 0.4)',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    fontWeight: 600,
+                                    lineHeight: 1
+                                  }}>
+                                    Newly Accepted
+                                  </span>
+                                )}
+                              </div>
                               <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                 <span style={{ color: friend.status === 'Online' ? '#4ade80' : '#cbd5e1' }}>{friend.status || 'Online'}</span>
                               </p>

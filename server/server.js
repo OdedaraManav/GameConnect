@@ -578,6 +578,33 @@ function getCanonicalPair(id1, id2) {
   };
 }
 
+// In-memory store for newly accepted friend request notifications
+// Key: targetUserId (User who sent the request and whose request was accepted)
+// Value: Set of friendUserIds (Users who accepted the request)
+const acceptedFriendNotifications = new Map();
+
+function recordAcceptedFriendNotification(userId, friendId) {
+  const targetId = parseInt(userId, 10);
+  const fId = parseInt(friendId, 10);
+  if (Number.isNaN(targetId) || Number.isNaN(fId)) return;
+  if (!acceptedFriendNotifications.has(targetId)) {
+    acceptedFriendNotifications.set(targetId, new Set());
+  }
+  acceptedFriendNotifications.get(targetId).add(fId);
+}
+
+function removeAcceptedFriendNotification(user1Id, user2Id) {
+  const u1 = parseInt(user1Id, 10);
+  const u2 = parseInt(user2Id, 10);
+  if (acceptedFriendNotifications.has(u1)) {
+    acceptedFriendNotifications.get(u1).delete(u2);
+  }
+  if (acceptedFriendNotifications.has(u2)) {
+    acceptedFriendNotifications.get(u2).delete(u1);
+  }
+}
+
+
 // 2.7 Social Foundation Routes
 
 // GET /api/users/search — Search users by username (excluding self, blocked users, & sensitive data)
@@ -701,6 +728,8 @@ app.post('/api/social/requests', authenticateToken, async (req, res) => {
           data: canonical
         })
       ]);
+
+      recordAcceptedFriendNotification(targetId, req.user.id);
 
       return res.json({
         status: 'success',
@@ -831,10 +860,51 @@ app.post('/api/social/requests/:id/accept', authenticateToken, async (req, res) 
       })
     ]);
 
+    recordAcceptedFriendNotification(request.senderId, request.receiverId);
+
     res.json({ status: 'success', message: 'Friend request accepted!' });
   } catch (error) {
     console.error('Error accepting friend request:', error);
     res.status(500).json({ status: 'error', message: 'Failed to accept friend request.' });
+  }
+});
+
+// GET /api/social/requests/accepted — Fetch newly accepted friend notifications for authenticated user
+app.get('/api/social/requests/accepted', authenticateToken, async (req, res) => {
+  try {
+    const friendSet = acceptedFriendNotifications.get(req.user.id);
+    if (!friendSet || friendSet.size === 0) {
+      return res.json({ status: 'success', requests: [], count: 0 });
+    }
+
+    const friendIds = Array.from(friendSet);
+    const acceptedFriends = await prisma.user.findMany({
+      where: { id: { in: friendIds } },
+      select: {
+        id: true,
+        username: true,
+        avatar: true,
+        platform: true,
+        playstyle: true,
+        status: true
+      }
+    });
+
+    res.json({ status: 'success', requests: acceptedFriends, count: acceptedFriends.length });
+  } catch (error) {
+    console.error('Error fetching accepted friend notifications:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch accepted notifications.' });
+  }
+});
+
+// POST /api/social/requests/accepted/clear — Clear newly accepted friend notifications for authenticated user
+app.post('/api/social/requests/accepted/clear', authenticateToken, async (req, res) => {
+  try {
+    acceptedFriendNotifications.delete(req.user.id);
+    res.json({ status: 'success', message: 'Accepted friend notifications cleared.' });
+  } catch (error) {
+    console.error('Error clearing accepted friend notifications:', error);
+    res.status(500).json({ status: 'error', message: 'Failed to clear accepted notifications.' });
   }
 });
 
@@ -940,6 +1010,8 @@ app.delete('/api/social/friends/:friendId', authenticateToken, async (req, res) 
       where: canonical
     });
 
+    removeAcceptedFriendNotification(req.user.id, friendId);
+
     res.json({ status: 'success', message: 'User removed from friends list.' });
   } catch (error) {
     console.error('Error unfriending user:', error);
@@ -977,6 +1049,8 @@ app.post('/api/social/block', authenticateToken, async (req, res) => {
         }
       })
     ]);
+
+    removeAcceptedFriendNotification(req.user.id, targetId);
 
     res.json({ status: 'success', message: 'User blocked.' });
   } catch (error) {

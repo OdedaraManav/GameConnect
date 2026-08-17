@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { CURRENT_USER } from '../data/mockData';
 import GameCard from '../components/GameCard';
-import { fetchJson, getIncomingFriendRequests } from '../services/api';
+import { fetchJson, getIncomingFriendRequests, getAcceptedFriendRequests } from '../services/api';
 import { Gamepad2, Trophy, Heart, Clock, Compass, MapPin, Monitor, Flame, Activity, Loader2, Edit3, X, Check, Plus, Trash2, Star, Target, ShieldCheck, AlertCircle } from 'lucide-react';
 
 import AnalogTimePicker from '../components/AnalogTimePicker';
@@ -32,6 +32,7 @@ export default function Profile() {
   // Social Modal & Pending Requests State
   const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  const [acceptedRequestCount, setAcceptedRequestCount] = useState(0);
 
   // Edit Profile Modal State
   const [isEditing, setIsEditing] = useState(false);
@@ -96,24 +97,35 @@ export default function Profile() {
     }
   }, [isAuthenticated]);
 
-  // Fetch pending incoming friend requests count for notification badge
+  // Fetch pending incoming friend requests & accepted friend notifications
   useEffect(() => {
-    async function fetchPendingRequests() {
+    async function fetchSocialNotifications() {
       if (!token || !isAuthenticated) {
         setPendingRequestCount(0);
+        setAcceptedRequestCount(0);
         return;
       }
       try {
-        const res = await getIncomingFriendRequests(token);
-        if (res && res.requests) {
-          setPendingRequestCount(res.requests.length);
+        const [incRes, accRes] = await Promise.all([
+          getIncomingFriendRequests(token).catch(() => ({ requests: [] })),
+          getAcceptedFriendRequests(token).catch(() => ({ requests: [] }))
+        ]);
+        if (incRes && incRes.requests) {
+          setPendingRequestCount(incRes.requests.length);
+        }
+        if (accRes && accRes.requests) {
+          setAcceptedRequestCount(accRes.requests.length);
         }
       } catch (err) {
         console.error('Error fetching incoming friend requests:', err);
       }
     }
 
-    fetchPendingRequests();
+    fetchSocialNotifications();
+    window.addEventListener('social_data_changed', fetchSocialNotifications);
+    return () => {
+      window.removeEventListener('social_data_changed', fetchSocialNotifications);
+    };
   }, [token, isAuthenticated]);
 
   // Toggle body scroll lock when modal opens/closes
@@ -323,6 +335,29 @@ export default function Profile() {
                         }}
                       >
                         {pendingRequestCount}
+                      </span>
+                    )}
+                    {acceptedRequestCount > 0 && (
+                      <span
+                        className="social-accepted-badge"
+                        data-testid="social-accepted-badge"
+                        title={`${acceptedRequestCount} newly accepted friend request${acceptedRequestCount > 1 ? 's' : ''}`}
+                        style={{
+                          backgroundColor: '#22c55e',
+                          color: '#ffffff',
+                          fontSize: '0.725rem',
+                          fontWeight: '700',
+                          padding: '0.1rem 0.45rem',
+                          borderRadius: '9999px',
+                          lineHeight: '1',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)',
+                          marginLeft: '0.2rem'
+                        }}
+                      >
+                        ✓ {acceptedRequestCount}
                       </span>
                     )}
                   </button>
@@ -1201,6 +1236,7 @@ export default function Profile() {
         isOpen={isSocialModalOpen}
         onClose={() => setIsSocialModalOpen(false)}
         onRequestCountChange={(count) => setPendingRequestCount(count)}
+        onAcceptedCountChange={(count) => setAcceptedRequestCount(count)}
       />
     </div>
   );

@@ -6,12 +6,16 @@ import PlayerSection from '../components/PlayerSection';
 import HowItWorks from '../components/HowItWorks';
 import CTA from '../components/CTA';
 
-import { fetchJson } from '../services/api';
+import { fetchJson, getAcceptedFriendRequests, clearAcceptedFriendRequests } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { CheckCircle, X } from 'lucide-react';
 
 export default function Home() {
+  const { token, isAuthenticated } = useAuth();
   const [games, setGames] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
+  const [unreadAcceptedFriends, setUnreadAcceptedFriends] = useState([]);
 
   useEffect(() => {
     async function loadGames() {
@@ -24,6 +28,35 @@ export default function Home() {
     }
     loadGames();
   }, []);
+
+  useEffect(() => {
+    async function loadNotifications() {
+      if (!token) {
+        setUnreadAcceptedFriends([]);
+        return;
+      }
+      try {
+        const res = await getAcceptedFriendRequests(token);
+        if (res && res.requests) {
+          setUnreadAcceptedFriends(res.requests);
+        } else {
+          setUnreadAcceptedFriends([]);
+        }
+      } catch (err) {
+        console.error('Error loading accepted friend notifications on home page:', err);
+      }
+    }
+    loadNotifications();
+  }, [token, isAuthenticated]);
+
+  const handleDismissHomeNotification = async () => {
+    setUnreadAcceptedFriends([]);
+    try {
+      await clearAcceptedFriendRequests(token);
+    } catch (err) {
+      console.error('Error clearing accepted friend notification:', err);
+    }
+  };
 
   // Filter games based on search query or selected tag
   const filteredGames = games.filter((game) => {
@@ -39,6 +72,51 @@ export default function Home() {
 
   return (
     <>
+      {/* Friend Request Acceptance Notification Banner */}
+      {unreadAcceptedFriends.length > 0 && (
+        <div className="container" style={{ marginTop: '1.25rem', marginBottom: '0.25rem' }}>
+          <div
+            data-testid="home-accepted-notification"
+            className="glass-panel"
+            style={{
+              padding: '0.85rem 1.25rem',
+              borderRadius: '12px',
+              background: 'rgba(34, 197, 94, 0.15)',
+              border: '1px solid rgba(34, 197, 94, 0.35)',
+              color: '#4ade80',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              boxShadow: '0 4px 20px rgba(34, 197, 94, 0.15)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <CheckCircle size={20} style={{ color: '#22c55e', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.925rem', fontWeight: 500, color: '#f8fafc' }}>
+                <strong>{unreadAcceptedFriends.map(u => u.username).join(', ')}</strong> accepted your friend request.
+              </span>
+            </div>
+            <button
+              onClick={handleDismissHomeNotification}
+              className="btn btn-secondary btn-sm"
+              style={{
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8rem',
+                borderColor: 'rgba(34, 197, 94, 0.4)',
+                color: '#4ade80',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={14} /> Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Hero Banner */}
       <Hero />
 

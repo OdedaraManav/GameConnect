@@ -202,6 +202,19 @@ export async function getBlockedUsers(token) {
   });
 }
 
+export async function getAcceptedFriendRequests(token) {
+  return fetchJson('/social/requests/accepted', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+export async function clearAcceptedFriendRequests(token) {
+  return fetchJson('/social/requests/accepted/clear', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
 
 
 
